@@ -5,9 +5,9 @@ class Deficiency(Base):
     __tablename__ = "deficiencies"
 
     deficiency_id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    student_number = Column(Integer, ForeignKey("students.student_number"), nullable=False)
+    student_id    = Column(Integer, ForeignKey("students.student_id"), nullable=False)
     subject_id    = Column(Integer, ForeignKey("subjects.subject_id"), nullable=False)
-    reason        = Column(String, nullable=False)  # Incomplete / Failed / Dropped / Other
+    type          = Column(String, nullable=True)  # Incomplete / Failed / Dropped / Other
     status        = Column(String, default="pending")  # pending / resolved
     semester      = Column(String, nullable=True)
     deadline      = Column(String, nullable=True)

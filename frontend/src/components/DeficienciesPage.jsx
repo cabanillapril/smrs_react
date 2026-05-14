@@ -9,7 +9,7 @@ import { StatusBadge } from './Badges'
 export default function DeficienciesPage({ onAdd }) {
   const { deficiencies, students } = useData()
   const { refresh, loading } = useDeficiencies()
-  
+
   const [search, setSearch] = useState('')
   const [course, setCourse] = useState('')
   const [major, setMajor] = useState('')
@@ -19,12 +19,12 @@ export default function DeficienciesPage({ onAdd }) {
   const filtered = deficiencies.filter((d) => {
     const student = students.find(s => s.student_number === d.student_number)
     const studentName = student ? (student.first_name + ' ' + student.last_name).toLowerCase() : ''
-    
-    const matchesSearch = 
+
+    const matchesSearch =
       studentName.includes(search.toLowerCase()) ||
       d.student_number.toLowerCase().includes(search.toLowerCase()) ||
       d.subject_code.toLowerCase().includes(search.toLowerCase())
-    
+
     const matchesCourse = !course || student?.course === course
     const matchesMajor = !major || student?.major === major
     const matchesYear = !year || student?.year_level === parseInt(year)
@@ -61,9 +61,9 @@ export default function DeficienciesPage({ onAdd }) {
       <div className="filter-bar">
         <div className="search-field">
           <span><i className="ph ph-magnifying-glass" /></span>
-          <input 
-            type="text" 
-            placeholder="Search by student or subject…" 
+          <input
+            type="text"
+            placeholder="Search by student or subject…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -74,10 +74,10 @@ export default function DeficienciesPage({ onAdd }) {
           {PROGRAMS.map(p => <option key={p} value={p}>{p}</option>)}
         </select>
 
-        <MajorSelect 
-          className="filter-select" 
-          program={course} 
-          value={major} 
+        <MajorSelect
+          className="filter-select"
+          program={course}
+          value={major}
           onChange={(e) => setMajor(e.target.value)}
           emptyLabel="All Majors"
         />
@@ -116,7 +116,7 @@ export default function DeficienciesPage({ onAdd }) {
               const s = students.find(st => st.student_number === d.student_number)
               const studentId = s ? (s.student_id || s.student_number) : d.student_number
               const studentName = s ? `${s.last_name}, ${s.first_name}` : 'Unknown Student'
-              
+
               return (
                 <tr key={d.id}>
                   <td style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{index + 1}</td>

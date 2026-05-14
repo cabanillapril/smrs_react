@@ -5,7 +5,7 @@ class CurriculumCreate(BaseModel):
     course:     str
     year_level: int
     semester:   int
-    subject_id: int
+    subject_id: Optional[int] = None   # optional – routes resolve this themselves
     major:      Optional[str] = None
 
 class CurriculumOut(BaseModel):

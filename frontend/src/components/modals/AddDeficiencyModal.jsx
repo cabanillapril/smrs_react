@@ -6,7 +6,7 @@ import { DEFICIENCY_TYPES, SEMESTERS } from '../../utils/constants'
 
 export default function AddDeficiencyModal({ isOpen, onClose, onSaved }) {
   const [form, setForm] = useState({
-    student_number: '',
+    student_id: '',
     subject_code: '',
     type: 'Incomplete',
     semester: SEMESTERS[0],
@@ -19,12 +19,12 @@ export default function AddDeficiencyModal({ isOpen, onClose, onSaved }) {
   }
 
   async function handleSave() {
-    if (!form.student_number || !form.subject_code) return
+    if (!form.student_id || !form.subject_code) return
     setLoading(true)
     try {
       await deficiencyService.create(form)
       setForm({
-        student_number: '',
+        student_id: '',
         subject_code: '',
         type: 'Incomplete',
         semester: SEMESTERS[0],
@@ -47,8 +47,8 @@ export default function AddDeficiencyModal({ isOpen, onClose, onSaved }) {
       size="narrow"
     >
       <div className="modal-body">
-        <FormGroup label="Student Number" required>
-          <FormInput value={form.student_number} onChange={(e) => set('student_number', e.target.value)} placeholder="e.g. 23-00000" />
+        <FormGroup label="Student ID" required>
+          <FormInput value={form.student_id} onChange={(e) => set('student_id', e.target.value)} placeholder="e.g. 23-00000" />
         </FormGroup>
         <FormGroup label="Subject Code" required>
           <FormInput value={form.subject_code} onChange={(e) => set('subject_code', e.target.value)} placeholder="e.g. MATH101" />

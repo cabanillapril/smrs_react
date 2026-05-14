@@ -1,6 +1,6 @@
 import { MAJORS_BY_PROGRAM } from '../utils/constants'
 
-export default function MajorSelect({ program, value, onChange, isFilter = false, id, ...rest }) {
+export default function MajorSelect({ program, value, onChange, emptyLabel, id, ...rest }) {
   const majors = MAJORS_BY_PROGRAM[program] || []
 
   return (
@@ -9,10 +9,9 @@ export default function MajorSelect({ program, value, onChange, isFilter = false
       className={rest.className || 'form-input'}
       value={value}
       onChange={onChange}
-      {...rest}
     >
-      {isFilter
-        ? <option value="">All Majors</option>
+      {emptyLabel
+        ? <option value="">{emptyLabel}</option>
         : program
           ? majors.length === 0
             ? <option value="">No majors for this program</option>

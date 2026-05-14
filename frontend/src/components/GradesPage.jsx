@@ -7,7 +7,7 @@ import MajorSelect from './MajorSelect'
 export default function GradesPage({ onAdd }) {
   const { grades, students } = useData()
   const { refresh, loading } = useGrades()
-  
+
   const [search, setSearch] = useState('')
   const [course, setCourse] = useState('')
   const [major, setMajor] = useState('')
@@ -15,14 +15,14 @@ export default function GradesPage({ onAdd }) {
   const [section, setSection] = useState('')
 
   const filtered = grades.filter((g) => {
-    const student = students.find(s => s.student_number === g.student_number)
+    const student = students.find(s => s.student_id === g.student_id)
     const studentName = student ? (student.first_name + ' ' + student.last_name).toLowerCase() : ''
-    
-    const matchesSearch = 
+
+    const matchesSearch =
       studentName.includes(search.toLowerCase()) ||
-      g.student_number.toLowerCase().includes(search.toLowerCase()) ||
+      g.student_id.toLowerCase().includes(search.toLowerCase()) ||
       g.subject_code.toLowerCase().includes(search.toLowerCase())
-    
+
     const matchesCourse = !course || student?.course === course
     const matchesMajor = !major || student?.major === major
     const matchesYear = !year || student?.year_level === parseInt(year)
@@ -49,9 +49,9 @@ export default function GradesPage({ onAdd }) {
       <div className="filter-bar">
         <div className="search-field">
           <span><i className="ph ph-magnifying-glass" /></span>
-          <input 
-            type="text" 
-            placeholder="Search by student or subject…" 
+          <input
+            type="text"
+            placeholder="Search by student or subject…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -62,10 +62,10 @@ export default function GradesPage({ onAdd }) {
           {PROGRAMS.map(p => <option key={p} value={p}>{p}</option>)}
         </select>
 
-        <MajorSelect 
-          className="filter-select" 
-          program={course} 
-          value={major} 
+        <MajorSelect
+          className="filter-select"
+          program={course}
+          value={major}
           onChange={(e) => setMajor(e.target.value)}
           emptyLabel="All Majors"
         />
@@ -101,10 +101,10 @@ export default function GradesPage({ onAdd }) {
           </thead>
           <tbody>
             {filtered.map((g, index) => {
-              const s = students.find(st => st.student_number === g.student_number)
-              const studentId = s ? (s.student_id || s.student_number) : g.student_number
+              const s = students.find(st => st.student_id === g.student_id)
+              const studentId = s ? (s.student_id || s.student_id) : g.student_id
               const studentName = s ? `${s.last_name}, ${s.first_name}` : 'Unknown Student'
-              
+
               return (
                 <tr key={g.id}>
                   <td style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{index + 1}</td>

@@ -6,7 +6,7 @@ from ..schemas.grade_schema import GradeCreate, GradeUpdate
 
 def _enrich(grade: Grade, db: Session) -> dict:
     d = {c.name: getattr(grade, c.name) for c in grade.__table__.columns}
-    student = db.query(Student).filter(Student.student_number == grade.student_number).first()
+    student = db.query(Student).filter(Student.student_id == grade.student_id).first()
     subject = db.query(Subject).filter(Subject.subject_id == grade.subject_id).first()
     d["student_name"] = f"{student.last_name}, {student.first_name}" if student else None
     d["student_id"]   = student.student_id if student else None
@@ -19,8 +19,8 @@ def get_all(db: Session):
     grades = db.query(Grade).all()
     return [_enrich(g, db) for g in grades]
 
-def get_by_student(db: Session, student_number: int):
-    grades = db.query(Grade).filter(Grade.student_number == student_number).all()
+def get_by_student(db: Session, student_id: str):
+    grades = db.query(Grade).filter(Grade.student_id == student_id).all()
     return [_enrich(g, db) for g in grades]
 
 def create(db: Session, data: GradeCreate):

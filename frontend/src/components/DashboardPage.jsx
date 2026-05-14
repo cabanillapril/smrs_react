@@ -51,25 +51,27 @@ export default function DashboardPage({ stats, onNavigate, onAddStudent, user })
       </div>
 
       <div className="stats-grid">
-        <div className="stat-card stat-blue">
-          <div className="stat-top">
-            <span className="stat-label">Total Students</span>
-            <span className="stat-icon"><i className="ph ph-users" /></span>
-          </div>
-          <div className="stat-value">{stats?.total_students ?? '—'}</div>
-          <div className="stat-change positive">Live from database</div>
-        </div>
         <div className="stat-card stat-green">
           <div className="stat-top">
-            <span className="stat-label">Active Enrolled</span>
+            <span className="stat-label">Active</span>
             <span className="stat-icon"><i className="ph ph-file-text" /></span>
           </div>
           <div className="stat-value">{stats?.active_students ?? '—'}</div>
           <div className="stat-change positive">Excludes graduated</div>
         </div>
+
+        <div className="stat-card stat-blue">
+          <div className="stat-top">
+            <span className="stat-label">Total</span>
+            <span className="stat-icon"><i className="ph ph-users" /></span>
+          </div>
+          <div className="stat-value">{stats?.total_students ?? '—'}</div>
+          <div className="stat-change positive">All students</div>
+        </div>
+
         <div className="stat-card stat-orange">
           <div className="stat-top">
-            <span className="stat-label">Pending Deficiencies</span>
+            <span className="stat-label">Deficient</span>
             <span className="stat-icon"><i className="ph ph-warning-circle" /></span>
           </div>
           <div className="stat-value">{stats?.pending_deficiencies ?? '—'}</div>
