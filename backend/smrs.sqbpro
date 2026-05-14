@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?><sqlb_project><db path="smrs.db" readonly="0" foreign_keys="1" case_sensitive_like="0" temp_store="0" wal_autocheckpoint="1000" synchronous="2"/><attached/><window><main_tabs open="structure browser pragmas query" current="3"/></window><tab_structure><column_width id="0" width="300"/><column_width id="1" width="0"/><column_width id="2" width="100"/><column_width id="3" width="2676"/><column_width id="4" width="0"/><expanded_item id="0" parent="1"/><expanded_item id="1" parent="1"/><expanded_item id="2" parent="1"/><expanded_item id="3" parent="1"/></tab_structure><tab_browse><table title="students" custom_title="0" dock_id="1" table="4,8:mainstudents"/><dock_state state="000000ff00000000fd00000001000000020000024800000213fc0100000001fb000000160064006f0063006b00420072006f00770073006500310100000000000002480000011800ffffff000002480000000000000004000000040000000800000008fc00000000"/><default_encoding codec=""/><browse_table_settings><table schema="main" name="curriculum" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="85"/><column index="2" value="45"/><column index="3" value="41"/><column index="4" value="66"/><column index="5" value="59"/><column index="6" value="68"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="students" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="101"/><column index="2" value="70"/><column index="3" value="85"/><column index="4" value="93"/><column index="5" value="85"/><column index="6" value="85"/><column index="7" value="54"/><column index="8" value="241"/><column index="9" value="99"/><column index="10" value="226"/><column index="11" value="66"/><column index="12" value="300"/><column index="13" value="48"/><column index="14" value="78"/><column index="15" value="187"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table></browse_table_settings></tab_browse><tab_sql><sql name="SQL 1*">INSERT INTO students (
+student_id, first_name, middle_name, last_name,
+birthday, gender, address, contact_number, email,
+course, major, year_level, section, status
+) VALUES
+
+-- =========================
+-- BS MECHATRONICS (4 YEAR - NO MAJOR)
+-- =========================
+('26-00001','Juan','Santos','Dela Cruz','2004-01-10','Male','QC','09170000001','s1@ctech.edu','BS Mechatronics and Automation Technology','',1,'A','Regular'),
+('26-00002','Maria','Reyes','Lopez','2004-02-11','Female','Manila','09170000002','s2@ctech.edu','BS Mechatronics and Automation Technology','',1,'A','Regular'),
+('26-00003','Carlo','Mendoza','Garcia','2003-03-12','Male','Pasig','09170000003','s3@ctech.edu','BS Mechatronics and Automation Technology','',2,'B','Regular'),
+('26-00004','Angela','Villanueva','Torres','2003-04-13','Female','Taguig','09170000004','s4@ctech.edu','BS Mechatronics and Automation Technology','',2,'B','Regular'),
+('26-00005','Mark','Fernandez','Ramos','2002-05-14','Male','Caloocan','09170000005','s5@ctech.edu','BS Mechatronics and Automation Technology','',3,'C','Regular'),
+
+-- =========================
+-- BS INDUSTRIAL TECHNOLOGY (4 YEAR WITH MAJORS)
+-- =========================
+('26-00006','Sophia','Lim','Aquino','2004-06-15','Female','QC','09170000006','s6@ctech.edu','BS Industrial Technology','Automotive Technology',1,'A','Regular'),
+('26-00007','Joshua','Castro','Perez','2003-07-16','Male','Manila','09170000007','s7@ctech.edu','BS Industrial Technology','Electrical Technology',2,'B','Regular'),
+('26-00008','Patricia','Navarro','Diaz','2003-08-17','Female','Pasig','09170000008','s8@ctech.edu','BS Industrial Technology','Electronics Technology',3,'C','Regular'),
+('26-00009','Kevin','Santiago','Flores','2004-09-18','Male','Makati','09170000009','s9@ctech.edu','BS Industrial Technology','Automotive Technology',1,'A','Regular'),
+('26-00010','Nicole','Rivera','Gutierrez','2003-10-19','Female','Marikina','09170000010','s10@ctech.edu','BS Industrial Technology','Electrical Technology',2,'B','Regular'),
+
+-- =========================
+-- 2-YEAR PROGRAMS
+-- =========================
+('26-00011','Adrian','Tan','Morales','2004-11-20','Male','Pasay','09170000011','s11@ctech.edu','2-Year Program','Automotive Technology',1,'A','Regular'),
+('26-00012','Bea','Salazar','Cruz','2004-12-21','Female','QC','09170000012','s12@ctech.edu','2-Year Program','Electrical Technology',2,'B','Regular'),
+('26-00013','Daniel','Co','Evangelista','2003-01-22','Male','Manila','09170000013','s13@ctech.edu','2-Year Program','Electronics Technology',1,'A','Regular'),
+('26-00014','Katrina','Ong','Valdez','2003-02-23','Female','Taguig','09170000014','s14@ctech.edu','2-Year Program','Automotive Technology',2,'B','Regular'),
+('26-00015','Miguel','Pineda','Herrera','2004-03-24','Male','Pasig','09170000015','s15@ctech.edu','2-Year Program','Electrical Technology',1,'A','Regular'),
+
+-- =========================
+-- 1-YEAR PROGRAMS
+-- =========================
+('26-00016','Ella','Chua','Martinez','2005-04-25','Female','Makati','09170000016','s16@ctech.edu','1-Year Program','Welding',1,'A','Regular'),
+('26-00017','Nathan','Lee','Bautista','2005-05-26','Male','Manila','09170000017','s17@ctech.edu','1-Year Program','Auto Mechanics',1,'B','Regular'),
+('26-00018','Camille','Yu','Soriano','2005-06-27','Female','QC','09170000018','s18@ctech.edu','1-Year Program','Practical Electronics',1,'C','Regular'),
+('26-00019','Ethan','Go','Velasco','2005-07-28','Male','Caloocan','09170000019','s19@ctech.edu','1-Year Program','Radio Mechanics',1,'D','Regular'),
+('26-00020','Alyssa','Sy','Natividad','2005-08-29','Female','Pasig','09170000020','s20@ctech.edu','1-Year Program','Welding',1,'A','Regular'),
+
+-- =========================
+-- EXTRA MIX (to reach 100 total pattern)
+-- =========================
+('26-00021','John','Dela','Cruz','2004-01-01','Male','Manila','09170000021','s21@ctech.edu','BS Industrial Technology','Automotive Technology',3,'C','Regular'),
+('26-00022','Anna','Reyes','Lopez','2003-01-02','Female','Pasig','09170000022','s22@ctech.edu','BS Industrial Technology','Electrical Technology',4,'D','Regular'),
+('26-00023','Luis','Santos','Garcia','2004-01-03','Male','QC','09170000023','s23@ctech.edu','BS Industrial Technology','Electronics Technology',2,'B','Regular'),
+('26-00024','Rica','Diaz','Torres','2005-01-04','Female','Taguig','09170000024','s24@ctech.edu','2-Year Program','Electrical Technology',2,'A','Regular'),
+('26-00025','Paul','Ramos','Mendoza','2005-01-05','Male','Manila','09170000025','s25@ctech.edu','1-Year Program','Auto Mechanics',1,'B','Regular');</sql><current_tab id="0"/></tab_sql></sqlb_project>
