@@ -80,19 +80,19 @@ export default function CurriculumPage({ onAddToCurriculum }) {
         ) : (
           (() => {
             const maxYears = (activeTab === 'bsit' || activeTab === 'bsmat') ? 4 : (activeTab === 'two-year') ? 2 : 1
-            const yearsArray = Array.from({length: maxYears}, (_, i) => i + 1)
-            
+            const yearsArray = Array.from({ length: maxYears }, (_, i) => i + 1)
+
             return yearsArray.map(year => (
               <div key={year} className="year-section">
                 <h2 style={{ paddingBottom: '12px', borderBottom: '2px solid var(--border)', marginBottom: '16px', color: 'var(--text-primary)' }}>
                   {year}{year === 1 ? 'st' : year === 2 ? 'nd' : year === 3 ? 'rd' : 'th'} Year
                 </h2>
-                
+
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                   {[1, 2].map(sem => {
                     const items = grouped[`${year}-${sem}`] || []
-                    const totalUnits = items.reduce((sum, item) => sum + (item.units || 0), 0)
-                    
+                    const totalUnits = items.reduce((sum, item) => sum + (item.unit || 0), 0)
+
                     return (
                       <div key={sem} className="curr-year-card" style={{ overflow: 'hidden' }}>
                         <div className="curr-year-header" style={{ background: 'var(--bg-raised)', padding: '12px 16px', fontWeight: '700', borderBottom: '1px solid var(--border)' }}>
@@ -111,7 +111,7 @@ export default function CurriculumPage({ onAddToCurriculum }) {
                               <tr key={item.id}>
                                 <td><b>{item.subject_code}</b></td>
                                 <td>{item.subject_name}</td>
-                                <td style={{ textAlign: 'center' }}>{item.units}</td>
+                                <td style={{ textAlign: 'center' }}>{item.unit}</td>
                               </tr>
                             )) : (
                               <tr>

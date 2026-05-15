@@ -30,7 +30,7 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [stats, setStats] = useState(null)
-  
+
   const toast = useToast()
   const { setStudents, setDeficiencies, setGrades, setSubjects, addActivity } = useData()
 
@@ -52,21 +52,26 @@ export default function App() {
   const { refresh: refreshSubjects } = useSubjects()
 
   useEffect(() => {
-    if (user) {
-      loadStats()
-      refreshStudents()
-      refreshDeficiencies()
-      refreshGrades()
-      refreshSubjects()
-    }
+    if (!user) return
+
+    loadStats()
+    refreshStudents()
+    refreshDeficiencies()
+    refreshGrades()
+    refreshSubjects()
   }, [user])
+
+
 
   async function loadStats() {
     try {
       const data = await dashboardService.getStats()
       setStats(data)
     } catch (err) {
-      console.error('Failed to load stats', err)
+      console.error('Failed to load stats', {
+        message: err?.message,
+        tokenPresent: !!localStorage.getItem('smrs_token'),
+      })
     }
   }
 

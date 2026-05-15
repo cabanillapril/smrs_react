@@ -6,7 +6,9 @@ from ..schemas.deficiency_schema import DeficiencyCreate
 
 def _enrich(d: Deficiency, db: Session) -> dict:
     row = {c.name: getattr(d, c.name) for c in d.__table__.columns}
-    student = db.query(Student).filter(Student.student_number == d.student_number).first()
+    # Join using correct columns from SQLAlchemy models
+    student = db.query(Student).filter(Student.student_id == d.student_id).first()
+
     subject = db.query(Subject).filter(Subject.subject_id == d.subject_id).first()
     row["student_name"] = f"{student.last_name}, {student.first_name}" if student else None
     row["student_id"]   = student.student_id if student else None
@@ -18,7 +20,8 @@ def get_all(db: Session):
     return [_enrich(d, db) for d in db.query(Deficiency).all()]
 
 def get_by_student(db: Session, student_number: int):
-    return [_enrich(d, db) for d in db.query(Deficiency).filter(Deficiency.student_number == student_number).all()]
+    
+    return [_enrich(d, db) for d in db.query(Deficiency).filter(Deficiency.student_id == student_number).all()]
 
 def create(db: Session, data: DeficiencyCreate):
     defic = Deficiency(**data.model_dump())

@@ -7,10 +7,10 @@ export default function DashboardPage({ stats, onNavigate, onAddStudent, user })
 
   // Bar chart data
   const courseConfigs = [
-    { label: 'BSIT', search: 'Industrial Technology', years: 4 },
-    { label: 'BSMAT', search: 'Bachelor of Science in Mechatronics', years: 4 },
-    { label: '2-Year', search: 'Two-Year', years: 2 },
-    { label: '1-Year', search: 'One-Year', years: 1 },
+    { label: 'BSIT', search: 'Bachelor of Science in Industrial Technology', years: 4 },
+    { label: 'BSMAT', search: 'Bachelor of Science in Mechatronics and Automation Technology', years: 4 },
+    { label: '2-Year', search: '2-Year Program', years: 2 },
+    { label: '1-Year', search: '1-Year Program', years: 1 },
   ]
 
   const counts = courseConfigs.map((c) =>
@@ -23,18 +23,16 @@ export default function DashboardPage({ stats, onNavigate, onAddStudent, user })
 
   const max = Math.max(...counts.flat(), 1)
 
-  // Donut chart data
+  // Donut chart data (Regular vs Irregular only; exclude deficiencies)
   const activeStudents = students.filter((s) => s.status !== 'Graduated')
   const regularCount = activeStudents.filter((s) => s.status === 'Regular').length
   const irregularCount = activeStudents.filter((s) => s.status === 'Irregular').length
-  const deficientIds = new Set(deficiencies.filter((d) => d.status === 'pending').map((d) => d.student_number))
-  const deficientCount = activeStudents.filter((s) => deficientIds.has(s.student_number)).length
-  const total = regularCount + irregularCount + deficientCount || 1
+  const total = regularCount + irregularCount || 1
   const circumference = 289
 
   const rPerc = (regularCount / total) * circumference
   const iPerc = (irregularCount / total) * circumference
-  const dPerc = (deficientCount / total) * circumference
+
 
   return (
     <div className="page active">
@@ -120,11 +118,11 @@ export default function DashboardPage({ stats, onNavigate, onAddStudent, user })
                 strokeDasharray={`${rPerc} ${circumference - rPerc}`} strokeDashoffset="0" className="donut-seg" />
               <circle cx="60" cy="60" r="46" fill="none" stroke="var(--accent-green)" strokeWidth="16"
                 strokeDasharray={`${iPerc} ${circumference - iPerc}`} strokeDashoffset={`${-rPerc}`} className="donut-seg" />
-              <circle cx="60" cy="60" r="46" fill="none" stroke="var(--accent-orange)" strokeWidth="16"
-                strokeDasharray={`${dPerc} ${circumference - dPerc}`} strokeDashoffset={`${-(rPerc + iPerc)}`} className="donut-seg" />
+
             </svg>
             <div className="donut-center">
-              <span className="donut-num">{regularCount + irregularCount + deficientCount}</span>
+              <span className="donut-num">{regularCount + irregularCount}</span>
+
               <span className="donut-lbl">Total</span>
             </div>
           </div>
@@ -137,11 +135,8 @@ export default function DashboardPage({ stats, onNavigate, onAddStudent, user })
               <span className="dl-dot" style={{ background: 'var(--accent-green)' }} />
               <span>Irregular</span><b>{irregularCount}</b>
             </div>
-            <div className="dl-item">
-              <span className="dl-dot" style={{ background: 'var(--accent-orange)' }} />
-              <span>Deficient</span><b>{deficientCount}</b>
-            </div>
           </div>
+
         </div>
       </div>
 

@@ -14,12 +14,14 @@ def get_stats(db: Session = Depends(get_db)):
     total_deficiencies  = db.query(func.count(Deficiency.deficiency_id)).scalar() or 0
     pending_deficiencies= db.query(func.count(Deficiency.deficiency_id)).filter(Deficiency.status == "pending").scalar() or 0
     resolved_count      = db.query(func.count(Deficiency.deficiency_id)).filter(Deficiency.status == "resolved").scalar() or 0
+    # Deficiency model has no `reason` column; use `type` instead.
     incomplete_count    = db.query(func.count(Deficiency.deficiency_id)).filter(
-        Deficiency.reason.ilike("%incomplete%"), Deficiency.status == "pending"
+        Deficiency.type.ilike("%incomplete%"), Deficiency.status == "pending"
     ).scalar() or 0
     failed_count        = db.query(func.count(Deficiency.deficiency_id)).filter(
-        Deficiency.reason.ilike("%failed%"), Deficiency.status == "pending"
+        Deficiency.type.ilike("%failed%"), Deficiency.status == "pending"
     ).scalar() or 0
+
 
     return {
         "total_students":       total_students,

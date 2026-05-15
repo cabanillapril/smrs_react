@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useData } from '../context/AppContext'
 import { SECTIONS, PROGRAMS, YEAR_LEVELS, DEFICIENCY_TYPES } from '../utils/constants'
+
 import { useDeficiencies } from '../hooks/useDeficiencies'
 import { deficiencyService } from '../services/api'
 import MajorSelect from './MajorSelect'
@@ -10,6 +11,7 @@ export default function DeficienciesPage({ onAdd }) {
   const { deficiencies, students } = useData()
   const { refresh, loading } = useDeficiencies()
 
+
   const [search, setSearch] = useState('')
   const [course, setCourse] = useState('')
   const [major, setMajor] = useState('')
@@ -17,12 +19,12 @@ export default function DeficienciesPage({ onAdd }) {
   const [section, setSection] = useState('')
 
   const filtered = deficiencies.filter((d) => {
-    const student = students.find(s => s.student_number === d.student_number)
+    const student = students.find(s => s.student_id === d.student_id)
     const studentName = student ? (student.first_name + ' ' + student.last_name).toLowerCase() : ''
 
     const matchesSearch =
       studentName.includes(search.toLowerCase()) ||
-      d.student_number.toLowerCase().includes(search.toLowerCase()) ||
+      d.student_id.toLowerCase().includes(search.toLowerCase()) ||
       d.subject_code.toLowerCase().includes(search.toLowerCase())
 
     const matchesCourse = !course || student?.course === course
@@ -113,37 +115,53 @@ export default function DeficienciesPage({ onAdd }) {
           </thead>
           <tbody>
             {filtered.map((d, index) => {
-              const s = students.find(st => st.student_number === d.student_number)
-              const studentId = s ? (s.student_id || s.student_number) : d.student_number
+              const s = students.find(st => st.student_id === d.student_id)
+              const studentId = s ? (s.student_id || s.student_id) : d.student_id
               const studentName = s ? `${s.last_name}, ${s.first_name}` : 'Unknown Student'
 
               return (
-                <tr key={d.id}>
+                <tr
+                  key={d.student_id}
+                  className={d.status === 'pending' ? 'hover-row' : ''}
+                  onClick={() => {
+                    if (d.status === 'pending') handleResolve(d.id)
+                  }}
+                  style={{ cursor: d.status === 'pending' ? 'pointer' : 'default' }}
+                >
                   <td style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{index + 1}</td>
                   <td>
                     <span className="id-cell">{studentId}</span>
                   </td>
                   <td>
                     <div style={{ fontWeight: 600 }}>{studentName}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{s?.email || ''}</div>
                   </td>
                   <td>
                     <div style={{ fontWeight: 500 }}>{d.subject_code}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{d.subject_name || '—'}</div>
                   </td>
                   <td><span className={`badge ${d.type.toLowerCase()}`}>{d.type}</span></td>
                   <td>{d.semester}</td>
                   <td><StatusBadge status={d.status} /></td>
                   <td>
-                    <div className="actions-cell">
-                      {d.status === 'pending' && (
-                        <button className="action-btn resolve" onClick={() => handleResolve(d.id)} title="Resolve">
-                          <i className="ph ph-check-circle" />
-                        </button>
-                      )}
-                    </div>
+                    {d.status === 'pending' && (
+                      <button
+                        className="action-btn resolve"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleResolve(d.student_id)
+                        }}
+                        title="Resolve"
+                        style={{
+                          backgroundColor: 'var(--accent-blue)',
+                          color: 'white',
+                          border: 'none',
+                        }}
+                      >
+                        <i className="ph ph-check-circle" />
+                      </button>
+                    )}
                   </td>
                 </tr>
+
               )
             })}
           </tbody>

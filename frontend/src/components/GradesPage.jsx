@@ -113,15 +113,13 @@ export default function GradesPage({ onAdd }) {
                   </td>
                   <td>
                     <div style={{ fontWeight: 600 }}>{studentName}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{s?.email || ''}</div>
                   </td>
                   <td>
                     <div style={{ fontWeight: 500 }}>{g.subject_code}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{g.subject_name || '—'}</div>
                   </td>
-                  <td>{g.midterm_grade || '—'}</td>
-                  <td>{g.final_grade || '—'}</td>
-                  <td><b>{g.computed_final_grade || '—'}</b></td>
+                  <td>{g.midterm || '—'}</td>
+                  <td>{g.finals || '—'}</td>
+                  <td><b>{g.grade || '—'}</b></td>
                   <td>
                     <span className={`badge ${g.remarks === 'Passed' ? 'passed' : 'failed'}`}>
                       {g.remarks}

@@ -8,8 +8,8 @@ export default function AddGradeModal({ isOpen, onClose, onSaved }) {
   const [form, setForm] = useState({
     student_id: '',
     subject_code: '',
-    midterm_grade: '',
-    final_grade: '',
+    midterm: '',
+    finals: '',
     semester: SEMESTERS[0],
   })
   const [loading, setLoading] = useState(false)
@@ -23,15 +23,18 @@ export default function AddGradeModal({ isOpen, onClose, onSaved }) {
     setLoading(true)
     try {
       await gradeService.create({
-        ...form,
-        midterm_grade: form.midterm_grade ? parseFloat(form.midterm_grade) : null,
-        final_grade: form.final_grade ? parseFloat(form.final_grade) : null,
+        student_id: form.student_id,
+        subject_code: form.subject_code,
+        semester: form.semester,
+        school_year: form.school_year,
+        midterm_grade: form.midterm ? parseFloat(form.midterm) : null,
+        final_grade: form.finals ? parseFloat(form.finals) : null,
       })
       setForm({
         student_id: '',
         subject_code: '',
-        midterm_grade: '',
-        final_grade: '',
+        midterm: '',
+        finals: '',
         semester: SEMESTERS[0],
       })
       onSaved()
@@ -59,10 +62,10 @@ export default function AddGradeModal({ isOpen, onClose, onSaved }) {
         </FormGroup>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <FormGroup label="Midterm Grade">
-            <FormInput type="number" step="0.25" value={form.midterm_grade} onChange={(e) => set('midterm_grade', e.target.value)} placeholder="1.0-5.0" />
+            <FormInput type="number" step="0.25" value={form.midterm} onChange={(e) => set('midterm', e.target.value)} placeholder="1.0-5.0" />
           </FormGroup>
           <FormGroup label="Finals Grade">
-            <FormInput type="number" step="0.25" value={form.final_grade} onChange={(e) => set('final_grade', e.target.value)} placeholder="1.0-5.0" />
+            <FormInput type="number" step="0.25" value={form.finals} onChange={(e) => set('finals', e.target.value)} placeholder="1.0-5.0" />
           </FormGroup>
         </div>
         <FormGroup label="Semester">
