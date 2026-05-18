@@ -3,6 +3,9 @@ import { useData } from '../context/AppContext'
 import { COURSE_TAB_KEYS } from '../utils/constants'
 import { curriculumService } from '../services/api'
 import MajorSelect from './MajorSelect'
+import useModal from '../hooks/useModal'
+import EditCurriculumModal from './modals/EditCurriculumModal'
+
 
 export default function CurriculumPage({ onAddToCurriculum }) {
   const { subjects } = useData()
@@ -11,7 +14,11 @@ export default function CurriculumPage({ onAddToCurriculum }) {
   const [curriculum, setCurriculum] = useState([])
   const [loading, setLoading] = useState(false)
 
+  const [editEntry, setEditEntry] = useState(null)
+  const editModal = useModal()
+
   const courseName = COURSE_TAB_KEYS[activeTab]
+
 
   useEffect(() => {
     loadCurriculum()
@@ -41,6 +48,13 @@ export default function CurriculumPage({ onAddToCurriculum }) {
 
   return (
     <div className="page active">
+      <EditCurriculumModal
+        isOpen={editModal.isOpen}
+        onClose={editModal.close}
+        onSaved={loadCurriculum}
+        entry={editEntry}
+      />
+
       <div className="page-header">
         <div>
           <h1 className="page-title">Curriculum</h1>
@@ -104,18 +118,58 @@ export default function CurriculumPage({ onAddToCurriculum }) {
                               <th style={{ width: '20%' }}>Subject Code</th>
                               <th>Descriptive Title</th>
                               <th style={{ width: '15%', textAlign: 'center' }}>Units</th>
+                              <th style={{ width: '120px' }}>Actions</th>
                             </tr>
                           </thead>
                           <tbody>
                             {items.length > 0 ? items.map(item => (
-                              <tr key={item.id}>
+                              <tr key={item.curriculum_id || item.id}>
                                 <td><b>{item.subject_code}</b></td>
                                 <td>{item.subject_name}</td>
                                 <td style={{ textAlign: 'center' }}>{item.unit}</td>
+                                <td>
+                                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                                    <button
+                                      className="action-btn edit"
+                                      title="Edit"
+                                      style={{
+                                        backgroundColor: 'transparent',
+                                        color: 'var(--accent-green)',
+                                        border: 'none',
+                                      }}
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        // Implemented via modal
+                                        setEditEntry(item)
+                                        editModal.open()
+                                      }}
+                                    >
+                                      <i className="ph ph-pencil-simple" />
+                                    </button>
+
+                                    <button
+                                      className="action-btn delete"
+                                      title="Delete"
+                                      style={{
+                                        backgroundColor: 'transparent',
+                                        color: 'var(--accent-red)',
+                                        border: 'none',
+                                      }}
+                                      onClick={async (e) => {
+                                        e.stopPropagation()
+                                        if (!confirm('Delete this curriculum entry?')) return
+                                        await curriculumService.delete(item.curriculum_id || item.id)
+                                        loadCurriculum()
+                                      }}
+                                    >
+                                      <i className="ph ph-trash" />
+                                    </button>
+                                  </div>
+                                </td>
                               </tr>
                             )) : (
                               <tr>
-                                <td colSpan="3" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                                <td colSpan="4" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
                                   No subjects added for this semester yet.
                                 </td>
                               </tr>
@@ -123,7 +177,7 @@ export default function CurriculumPage({ onAddToCurriculum }) {
                           </tbody>
                           <tfoot>
                             <tr style={{ background: 'var(--bg-raised)' }}>
-                              <td colSpan="2" style={{ textAlign: 'right', fontWeight: '600', padding: '12px 16px', borderBottom: 'none' }}>
+                              <td colSpan="3" style={{ textAlign: 'right', fontWeight: '600', padding: '12px 16px', borderBottom: 'none' }}>
                                 Total Units
                               </td>
                               <td style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--accent-blue)', padding: '12px 16px', borderBottom: 'none' }}>

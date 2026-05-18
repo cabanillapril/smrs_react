@@ -103,8 +103,10 @@ export const curriculumService = {
   getByCourse: (course) =>
     apiFetch(`/curriculum/?course=${encodeURIComponent(course)}`),
   create: (data) => apiFetch('/curriculum/', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id, data) => apiFetch(`/curriculum/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id) => apiFetch(`/curriculum/${id}`, { method: 'DELETE' }),
 }
+
 
 export const dashboardService = {
   getStats: () => apiFetch('/dashboard/stats'),

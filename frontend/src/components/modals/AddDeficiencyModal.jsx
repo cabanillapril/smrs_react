@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Modal from '../Modal'
+
 import { FormGroup, FormInput, FormSelect } from '../Form'
 import { deficiencyService } from '../../services/api'
 import { DEFICIENCY_TYPES, SEMESTERS } from '../../utils/constants'
 
-export default function AddDeficiencyModal({ isOpen, onClose, onSaved }) {
+export default function AddDeficiencyModal({ isOpen, onClose, onSaved, initialStudentId = '' }) {
   const [form, setForm] = useState({
     student_id: '',
     subject_code: '',
@@ -12,11 +13,19 @@ export default function AddDeficiencyModal({ isOpen, onClose, onSaved }) {
     semester: SEMESTERS[0],
     date_recorded: new Date().toISOString().split('T')[0],
   })
+
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (isOpen) {
+      setForm((prev) => ({ ...prev, student_id: initialStudentId || prev.student_id }))
+    }
+  }, [isOpen, initialStudentId])
 
   function set(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }))
   }
+
 
   async function handleSave() {
     if (!form.student_id || !form.subject_code) return

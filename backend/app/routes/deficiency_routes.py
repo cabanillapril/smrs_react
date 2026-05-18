@@ -39,9 +39,11 @@ def list_deficiencies(db: Session = Depends(get_db)):
     return deficiency_repo.get_all(db)
 
 
-@router.get("/student/{student_number}", response_model=List[DeficiencyOut])
-def get_deficiencies_by_student(student_number: int, db: Session = Depends(get_db)):
-    return deficiency_repo.get_by_student(db, student_number)
+@router.get("/student/{student_id}", response_model=List[DeficiencyOut])
+def get_deficiencies_by_student(student_id: str, db: Session = Depends(get_db)):
+    return deficiency_repo.get_by_student(db, student_id)
+
+    
 
 
 @router.post("/", response_model=DeficiencyOut, status_code=201)

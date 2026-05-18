@@ -45,6 +45,16 @@ export default function DeficienciesPage({ onAdd }) {
     }
   }
 
+  async function handleDelete(deficiencyId) {
+    if (!confirm('Delete this deficiency record?')) return
+    try {
+      await deficiencyService.delete(deficiencyId)
+      refresh()
+    } catch (err) {
+      alert(err.message)
+    }
+  }
+
   return (
     <div className="page active">
       <div className="page-header">
@@ -100,6 +110,12 @@ export default function DeficienciesPage({ onAdd }) {
       </div>
 
       <div className="table-card">
+        <style>{`
+          .deficiency-actions .action-btn.resolve { color: var(--accent-green) !important; }
+          .deficiency-actions .action-btn.resolve:hover { opacity: 0.9; }
+
+
+        `}</style>
         <table className="data-table">
           <thead>
             <tr>
@@ -123,9 +139,6 @@ export default function DeficienciesPage({ onAdd }) {
                 <tr
                   key={d.student_id}
                   className={d.status === 'pending' ? 'hover-row' : ''}
-                  onClick={() => {
-                    if (d.status === 'pending') handleResolve(d.id)
-                  }}
                   style={{ cursor: d.status === 'pending' ? 'pointer' : 'default' }}
                 >
                   <td style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{index + 1}</td>
@@ -140,25 +153,65 @@ export default function DeficienciesPage({ onAdd }) {
                   </td>
                   <td><span className={`badge ${d.type.toLowerCase()}`}>{d.type}</span></td>
                   <td>{d.semester}</td>
-                  <td><StatusBadge status={d.status} /></td>
                   <td>
-                    {d.status === 'pending' && (
+                    <span style={d.status === 'resolved' ? { color: 'var(--accent-green)' } : undefined}>
+                      <StatusBadge status={d.status} />
+                    </span>
+                  </td>
+
+                  <td className="actions-cell">
+                    <div className="deficiency-actions" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                      {/* Always show resolve when pending; otherwise show disabled icon */}
+                      {d.status === 'pending' ? (
+                        <button
+                          className="action-btn resolve"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleResolve(d.deficiency_id)
+                          }}
+                          title="Resolve"
+                          style={{
+                            backgroundColor: 'transparent',
+                            color: 'var(--accent-green)',
+                            border: 'none',
+                          }}
+                        >
+                          <i className="ph ph-check-circle" />
+                        </button>
+                      ) : (
+                        <button
+                          className="action-btn resolve"
+                          disabled
+                          onClick={(e) => e.stopPropagation()}
+                          title="Resolve"
+                          style={{
+                            backgroundColor: 'transparent',
+                            color: 'rgba(52, 211, 153, 0.35)',
+                            border: 'none',
+                            cursor: 'not-allowed',
+                          }}
+                        >
+                          <i className="ph ph-check-circle" />
+                        </button>
+                      )}
+
+                      {/* Always show delete */}
                       <button
-                        className="action-btn resolve"
+                        className="action-btn delete"
                         onClick={(e) => {
                           e.stopPropagation()
-                          handleResolve(d.student_id)
+                          handleDelete(d.deficiency_id)
                         }}
-                        title="Resolve"
+                        title="Delete"
                         style={{
-                          backgroundColor: 'var(--accent-blue)',
-                          color: 'white',
+                          backgroundColor: 'transparent',
+                          color: 'var(--accent-red)',
                           border: 'none',
                         }}
                       >
-                        <i className="ph ph-check-circle" />
+                        <i className="ph ph-trash" />
                       </button>
-                    )}
+                    </div>
                   </td>
                 </tr>
 

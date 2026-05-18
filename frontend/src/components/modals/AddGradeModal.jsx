@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Modal from '../Modal'
+
 import { FormGroup, FormInput, FormSelect } from '../Form'
 import { gradeService } from '../../services/api'
 import { SEMESTERS } from '../../utils/constants'
 
-export default function AddGradeModal({ isOpen, onClose, onSaved }) {
+export default function AddGradeModal({ isOpen, onClose, onSaved, initialStudentId = '' }) {
   const [form, setForm] = useState({
     student_id: '',
     subject_code: '',
@@ -12,11 +13,19 @@ export default function AddGradeModal({ isOpen, onClose, onSaved }) {
     finals: '',
     semester: SEMESTERS[0],
   })
+
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (isOpen) {
+      setForm((prev) => ({ ...prev, student_id: initialStudentId || prev.student_id }))
+    }
+  }, [isOpen, initialStudentId])
 
   function set(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }))
   }
+
 
   async function handleSave() {
     if (!form.student_id || !form.subject_code) return

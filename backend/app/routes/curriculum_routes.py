@@ -64,8 +64,60 @@ def add_to_curriculum(data: CurriculumIn, db: Session = Depends(get_db)):
     return curriculum_repo._enrich(entry, db)
 
 
+@router.put("/{curriculum_id}", response_model=CurriculumOut)
+def update_curriculum(
+    curriculum_id: int,
+    data: CurriculumIn,
+    db: Session = Depends(get_db),
+):
+    # Load entry
+    entry = db.query(Curriculum).filter(Curriculum.curriculum_id == curriculum_id).first()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Curriculum entry not found")
+
+    code = data.subject_code.strip().upper()
+
+    # Find or create/update subject
+    subject = db.query(Subject).filter(Subject.subject_code == code).first()
+    if not subject:
+        subject = Subject(
+            subject_code=code,
+            subject_name=data.subject_name.strip() if data.subject_name else code,
+            unit=data.units or 3,
+            course=data.course,
+            major=data.major,
+        )
+        db.add(subject)
+        db.commit()
+        db.refresh(subject)
+    else:
+        # Update subject details if provided
+        if data.subject_name is not None:
+            subject.subject_name = data.subject_name.strip()
+        if data.units is not None:
+            subject.unit = data.units
+        subject.course = data.course
+        subject.major = data.major
+        db.add(subject)
+        db.commit()
+        db.refresh(subject)
+
+    # Update curriculum row
+    entry.course = data.course
+    entry.major = data.major
+    entry.year_level = data.year_level
+    entry.semester = data.semester
+    entry.subject_id = subject.subject_id
+
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    return curriculum_repo._enrich(entry, db)
+
+
 @router.delete("/{curriculum_id}", status_code=204)
 def remove_from_curriculum(curriculum_id: int, db: Session = Depends(get_db)):
     ok = curriculum_repo.delete(db, curriculum_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Curriculum entry not found")
+

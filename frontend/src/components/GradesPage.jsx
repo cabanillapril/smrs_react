@@ -3,8 +3,9 @@ import { useData } from '../context/AppContext'
 import { SECTIONS, PROGRAMS, YEAR_LEVELS } from '../utils/constants'
 import { useGrades } from '../hooks/useGrades'
 import MajorSelect from './MajorSelect'
+import { gradeService } from '../services/api'
 
-export default function GradesPage({ onAdd }) {
+export default function GradesPage({ onAdd, onEdit }) {
   const { grades, students } = useData()
   const { refresh, loading } = useGrades()
 
@@ -97,6 +98,7 @@ export default function GradesPage({ onAdd }) {
               <th>Finals</th>
               <th>Final Grade</th>
               <th>Remarks</th>
+              <th style={{ width: '110px' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -106,7 +108,7 @@ export default function GradesPage({ onAdd }) {
               const studentName = s ? `${s.last_name}, ${s.first_name}` : 'Unknown Student'
 
               return (
-                <tr key={g.id}>
+                <tr key={g.grade_id}>
                   <td style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{index + 1}</td>
                   <td>
                     <span className="id-cell">{studentId}</span>
@@ -124,6 +126,47 @@ export default function GradesPage({ onAdd }) {
                     <span className={`badge ${g.remarks === 'Passed' ? 'passed' : 'failed'}`}>
                       {g.remarks}
                     </span>
+                  </td>
+                  <td>
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                      <button
+                        className="action-btn edit"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onEdit?.(g)
+                        }}
+                        title="Edit"
+                        style={{
+                          backgroundColor: 'transparent',
+                          color: 'var(--accent-green)',
+                          border: 'none',
+                        }}
+                      >
+                        <i className="ph ph-pencil-simple" />
+                      </button>
+
+                      <button
+                        className="action-btn delete"
+                        onClick={async (e) => {
+                          e.stopPropagation()
+                          if (!confirm('Delete this grade record?')) return
+                          try {
+                            await gradeService.delete(g.grade_id)
+                            refresh()
+                          } catch (err) {
+                            alert(err.message)
+                          }
+                        }}
+                        title="Delete"
+                        style={{
+                          backgroundColor: 'transparent',
+                          color: 'var(--accent-red)',
+                          border: 'none',
+                        }}
+                      >
+                        <i className="ph ph-trash" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               )

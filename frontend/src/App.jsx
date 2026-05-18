@@ -18,8 +18,11 @@ import StudentProfileModal from './components/modals/StudentProfileModal'
 import AddDeficiencyModal from './components/modals/AddDeficiencyModal'
 import AddGradeModal from './components/modals/AddGradeModal'
 import AddCurriculumModal from './components/modals/AddCurriculumModal'
+import EditGradeModal from './components/modals/EditGradeModal'
+import LogoutModal from './components/modals/LogoutModal'
 
 import useModal from './hooks/useModal'
+
 import { useStudents } from './hooks/useStudents'
 import { useDeficiencies } from './hooks/useDeficiencies'
 import { useGrades } from './hooks/useGrades'
@@ -35,14 +38,19 @@ export default function App() {
   const { setStudents, setDeficiencies, setGrades, setSubjects, addActivity } = useData()
 
   // Modals
+  const logoutModal = useModal()
+
   const studentModal = useModal()
+
   const editStudentModal = useModal()
   const profileModal = useModal()
   const deficiencyModal = useModal()
   const gradeModal = useModal()
+  const editGradeModal = useModal()
   const curriculumModal = useModal()
 
   const [selectedStudent, setSelectedStudent] = useState(null)
+  const [selectedGrade, setSelectedGrade] = useState(null)
   const [initialCourse, setInitialCourse] = useState('')
 
   // Data fetching
@@ -80,10 +88,16 @@ export default function App() {
   }
 
   function handleLogout() {
+    // open logout confirmation modal
+    logoutModal.open()
+  }
+
+  async function confirmLogout() {
     authService.logout()
     setUser(null)
     setCurrentPage('dashboard')
   }
+
 
   if (!user) {
     return <LoginPage onLogin={handleLogin} />
@@ -117,7 +131,15 @@ export default function App() {
       case 'deficiencies':
         return <DeficienciesPage onAdd={() => deficiencyModal.open()} />
       case 'grades':
-        return <GradesPage onAdd={() => gradeModal.open()} />
+        return (
+          <GradesPage
+            onAdd={() => gradeModal.open()}
+            onEdit={(g) => {
+              setSelectedGrade(g)
+              editGradeModal.open()
+            }}
+          />
+        )
       case 'curriculum':
         return (
           <CurriculumPage
@@ -157,6 +179,12 @@ export default function App() {
       </main>
 
       {/* Modals */}
+      <LogoutModal
+        isOpen={logoutModal.isOpen}
+        onClose={logoutModal.close}
+        onConfirm={confirmLogout}
+      />
+
       <AddStudentModal
         isOpen={studentModal.isOpen}
         onClose={studentModal.close}
@@ -191,11 +219,30 @@ export default function App() {
           loadStats()
           addActivity(`Deleted student <b>${selectedStudent?.student_number}</b>`, 'red')
         }}
+        onAddGrade={(studentNumber) => {
+          setSelectedStudent(selectedStudent) // keep current
+          gradeModal.open()
+          // grade modal will use initialStudentId prop
+        }}
+        onAddDeficiency={(studentNumber) => {
+          setSelectedStudent((prev) => prev)
+          setTimeout(() => {
+            deficiencyModal.open()
+          }, 0)
+          // keep selected student so initialStudentId keeps the correct format (student_number)
+        }}
+        onEditGrade={(g) => {
+          setSelectedGrade(g)
+          profileModal.close()
+          setTimeout(() => editGradeModal.open(), 0)
+        }}
       />
+
 
       <AddDeficiencyModal
         isOpen={deficiencyModal.isOpen}
         onClose={deficiencyModal.close}
+        initialStudentId={selectedStudent?.student_id || selectedStudent?.student_number || ''}
         onSaved={() => {
           refreshDeficiencies()
           loadStats()
@@ -206,9 +253,24 @@ export default function App() {
       <AddGradeModal
         isOpen={gradeModal.isOpen}
         onClose={gradeModal.close}
+        initialStudentId={selectedStudent?.student_id || selectedStudent?.student_number || ''}
         onSaved={() => {
           refreshGrades()
           addActivity('Added new grade entry', 'blue')
+        }}
+      />
+
+      <EditGradeModal
+        isOpen={editGradeModal.isOpen}
+        onClose={() => {
+          editGradeModal.close()
+          setSelectedGrade(null)
+        }}
+        grade={selectedGrade}
+        onSaved={() => {
+          refreshGrades()
+          loadStats()
+          addActivity('Updated grade entry', 'blue')
         }}
       />
 
