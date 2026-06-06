@@ -2,7 +2,8 @@ export function StatusBadge({ status }) {
   const cls = status?.toLowerCase() === 'regular' ? 'regular'
     : status?.toLowerCase() === 'irregular' ? 'irregular'
       : status?.toLowerCase() === 'graduated' ? 'graduated'
-        : 'deficient'
+        : status?.toLowerCase() === 'resolved' ? 'resolved'
+          : 'deficient'
   return <span className={`status-badge ${cls}`}>{status}</span>
 }
 

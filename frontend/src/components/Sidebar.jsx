@@ -4,7 +4,9 @@ export default function Sidebar({ isOpen, activePage, onNavigate, onLogout, user
     { id: 'students', label: 'Students', icon: 'ph-users' },
     { id: 'deficiencies', label: 'Deficiencies', icon: 'ph-warning-circle' },
     { id: 'grades', label: 'Grades', icon: 'ph-file-text' },
-    { id: 'curriculum', label: 'Curriculum', icon: 'ph-books', section: 'RECORDS' },
+    { id: 'import', label: 'Import Appraisal', icon: 'ph-upload', section: 'RECORDS' },
+    { id: 'import-grade', label: 'Import Grade Report', icon: 'ph-file-arrow-up' },
+    { id: 'curriculum', label: 'Curriculum', icon: 'ph-books' },
     { id: 'reports', label: 'Reports', icon: 'ph-chart-bar' },
   ]
 

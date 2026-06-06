@@ -112,4 +112,87 @@ export const dashboardService = {
   getStats: () => apiFetch('/dashboard/stats'),
 }
 
+export const importService = {
+  async preview(file) {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('commit', 'false')
+
+    const res = await fetch(API_BASE + '/import/appraisal', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+      },
+    })
+
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}))
+      throw new Error(errBody.detail || `HTTP ${res.status}`)
+    }
+
+    return res.json()
+  },
+  async commit(file) {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('commit', 'true')
+
+    const res = await fetch(API_BASE + '/import/appraisal', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+      },
+    })
+
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}))
+      throw new Error(errBody.detail || `HTTP ${res.status}`)
+    }
+
+    return res.json()
+  },
+  async previewGradeReport(file) {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('commit', 'false')
+
+    const res = await fetch(API_BASE + '/import/grade-report', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+      },
+    })
+
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}))
+      throw new Error(errBody.detail || `HTTP ${res.status}`)
+    }
+
+    return res.json()
+  },
+  async commitGradeReport(file) {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('commit', 'true')
+
+    const res = await fetch(API_BASE + '/import/grade-report', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+      },
+    })
+
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}))
+      throw new Error(errBody.detail || `HTTP ${res.status}`)
+    }
+
+    return res.json()
+  },
+}
+
 export default apiFetch

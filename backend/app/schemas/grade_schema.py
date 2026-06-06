@@ -32,7 +32,6 @@ class GradeOut(BaseModel):
     remarks: Optional[str]
     # Joined fields
     student_name: Optional[str] = None
-    student_id: Optional[str] = None
     subject_code: Optional[str] = None
     subject_name: Optional[str] = None
     unit: Optional[int] = None

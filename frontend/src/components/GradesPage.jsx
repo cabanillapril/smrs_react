@@ -5,7 +5,7 @@ import { useGrades } from '../hooks/useGrades'
 import MajorSelect from './MajorSelect'
 import { gradeService } from '../services/api'
 
-export default function GradesPage({ onAdd, onEdit }) {
+export default function GradesPage({ onAdd, onEdit, onViewStudent }) {
   const { grades, students } = useData()
   const { refresh, loading } = useGrades()
 
@@ -108,7 +108,7 @@ export default function GradesPage({ onAdd, onEdit }) {
               const studentName = s ? `${s.last_name}, ${s.first_name}` : 'Unknown Student'
 
               return (
-                <tr key={g.grade_id}>
+                <tr key={g.grade_id} onClick={() => onViewStudent?.(s)} style={{ cursor: 'pointer' }}>
                   <td style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{index + 1}</td>
                   <td>
                     <span className="id-cell">{studentId}</span>

@@ -1,26 +1,28 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useData } from '../context/AppContext'
 import { SECTIONS, PROGRAMS, YEAR_LEVELS, STATUSES } from '../utils/constants'
 import { useStudents } from '../hooks/useStudents'
 import MajorSelect from './MajorSelect'
 import { StatusBadge } from './Badges'
 
-export default function StudentsPage({ onEdit, onView, onAdd }) {
+export default function StudentsPage({ onEdit, onView, onAdd, globalSearch = '' }) {
   const { students } = useData()
   const { refresh, loading } = useStudents()
-  
+
   const [search, setSearch] = useState('')
   const [course, setCourse] = useState('')
   const [major, setMajor] = useState('')
   const [year, setYear] = useState('')
   const [section, setSection] = useState('')
   const [status, setStatus] = useState('')
+  const [showGraduated, setShowGraduated] = useState(false)
 
   const filtered = students.filter((s) => {
-    const matchesSearch = 
+    if (!showGraduated && s.status === 'Graduated') return false
+    const matchesSearch =
       (s.first_name + ' ' + s.last_name).toLowerCase().includes(search.toLowerCase()) ||
       (s.student_id || '').toLowerCase().includes(search.toLowerCase())
-    
+
     const matchesCourse = !course || s.course === course
     const matchesMajor = !major || s.major === major
     const matchesYear = !year || s.year_level === parseInt(year)
@@ -38,6 +40,10 @@ export default function StudentsPage({ onEdit, onView, onAdd }) {
     setSection('')
     setStatus('')
   }
+
+  useEffect(() => {
+    if (globalSearch !== undefined) setSearch(globalSearch)
+  }, [globalSearch])
 
   return (
     <div className="page active">
@@ -57,9 +63,9 @@ export default function StudentsPage({ onEdit, onView, onAdd }) {
       <div className="filter-bar">
         <div className="search-field">
           <span><i className="ph ph-magnifying-glass" /></span>
-          <input 
-            type="text" 
-            placeholder="Name or Student ID…" 
+          <input
+            type="text"
+            placeholder="Name or Student ID…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -70,10 +76,10 @@ export default function StudentsPage({ onEdit, onView, onAdd }) {
           {PROGRAMS.map(p => <option key={p} value={p}>{p}</option>)}
         </select>
 
-        <MajorSelect 
-          className="filter-select" 
-          program={course} 
-          value={major} 
+        <MajorSelect
+          className="filter-select"
+          program={course}
+          value={major}
           onChange={(e) => setMajor(e.target.value)}
           emptyLabel="All Majors"
         />
@@ -94,6 +100,10 @@ export default function StudentsPage({ onEdit, onView, onAdd }) {
         </select>
 
         <button className="btn btn-ghost" onClick={resetFilters}>Reset</button>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginLeft: 8 }}>
+          <input type="checkbox" checked={showGraduated} onChange={(e) => setShowGraduated(e.target.checked)} />
+          <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Show Graduated</span>
+        </label>
       </div>
 
       <div className="table-card">
@@ -111,9 +121,9 @@ export default function StudentsPage({ onEdit, onView, onAdd }) {
           </thead>
           <tbody>
             {filtered.map((s, index) => (
-              <tr 
-                key={s.student_number} 
-                onClick={() => onView(s)} 
+              <tr
+                key={s.student_number}
+                onClick={() => onView(s)}
                 style={{ cursor: 'pointer' }}
                 className="hover-row"
               >

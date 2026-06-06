@@ -4,7 +4,8 @@ from typing import Optional
 
 class DeficiencyCreate(BaseModel):
     student_id: str
-    subject_id: str
+    # accept subject_id as integer (models use integer IDs)
+    subject_id: Optional[int] = None
     type: str
     status: Optional[str] = "pending"
     semester: Optional[str] = None
@@ -30,7 +31,6 @@ class DeficiencyOut(BaseModel):
     date_resolved: Optional[str]
     # Joined
     student_name: Optional[str] = None
-    student_id: Optional[str] = None
     subject_code: Optional[str] = None
     subject_name: Optional[str] = None
 

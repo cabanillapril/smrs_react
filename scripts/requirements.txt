@@ -1,0 +1,10 @@
+pdfplumber
+pdf2image
+pytesseract
+pdfminer.six
+pillow
+pandas
+camelot-py[cv]
+ocrmypdf
+requests
+pypdfium2

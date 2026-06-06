@@ -19,9 +19,9 @@ def _enrich(d: Deficiency, db: Session) -> dict:
 def get_all(db: Session):
     return [_enrich(d, db) for d in db.query(Deficiency).all()]
 
-def get_by_student(db: Session, student_number: int):
-    
-    return [_enrich(d, db) for d in db.query(Deficiency).filter(Deficiency.student_id == student_number).all()]
+def get_by_student(db: Session, student_id: str):
+    # student_id is stored as string in Student model
+    return [_enrich(d, db) for d in db.query(Deficiency).filter(Deficiency.student_id == student_id).all()]
 
 def create(db: Session, data: DeficiencyCreate):
     defic = Deficiency(**data.model_dump())

@@ -11,6 +11,9 @@ import DeficienciesPage from './components/DeficienciesPage'
 import GradesPage from './components/GradesPage'
 import CurriculumPage from './components/CurriculumPage'
 import ReportsPage from './components/ReportsPage'
+import ImportAppraisalPage from './components/ImportAppraisalPage'
+import ImportGradeReport from './components/ImportGradeReport'
+
 
 import AddStudentModal from './components/modals/AddStudentModal'
 import EditStudentModal from './components/modals/EditStudentModal'
@@ -31,8 +34,10 @@ import { useSubjects } from './hooks/useSubjects'
 export default function App() {
   const [user, setUser] = useState(authService.getUser())
   const [currentPage, setCurrentPage] = useState('dashboard')
+  const [globalSearch, setGlobalSearch] = useState('')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [stats, setStats] = useState(null)
+  const [profileInitialTab, setProfileInitialTab] = useState(null)
 
   const toast = useToast()
   const { setStudents, setDeficiencies, setGrades, setSubjects, addActivity } = useData()
@@ -122,14 +127,16 @@ export default function App() {
               editStudentModal.open()
             }}
             onView={(s) => {
+              setProfileInitialTab('profile')
               setSelectedStudent(s)
               profileModal.open()
             }}
             onAdd={() => studentModal.open()}
+            globalSearch={globalSearch}
           />
         )
       case 'deficiencies':
-        return <DeficienciesPage onAdd={() => deficiencyModal.open()} />
+        return <DeficienciesPage onAdd={() => deficiencyModal.open()} onViewStudent={(s) => { setProfileInitialTab('deficiencies'); setSelectedStudent(s); profileModal.open(); }} />
       case 'grades':
         return (
           <GradesPage
@@ -138,6 +145,7 @@ export default function App() {
               setSelectedGrade(g)
               editGradeModal.open()
             }}
+            onViewStudent={(s) => { setProfileInitialTab('grades'); setSelectedStudent(s); profileModal.open(); }}
           />
         )
       case 'curriculum':
@@ -151,6 +159,10 @@ export default function App() {
         )
       case 'reports':
         return <ReportsPage />
+      case 'import':
+        return <ImportAppraisalPage />
+      case 'import-grade':
+        return <ImportGradeReport />
       default:
         return <DashboardPage stats={stats} />
     }
@@ -170,8 +182,8 @@ export default function App() {
         <Topbar
           onMenuClick={() => setSidebarOpen(!sidebarOpen)}
           onSearch={(val) => {
-            // Handle global search if needed, or pass to pages
-            console.log('Global search:', val)
+            setGlobalSearch(val || '')
+            if (currentPage !== 'students') setCurrentPage('students')
           }}
         />
 

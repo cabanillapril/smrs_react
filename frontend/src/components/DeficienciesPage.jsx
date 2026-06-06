@@ -7,7 +7,7 @@ import { deficiencyService } from '../services/api'
 import MajorSelect from './MajorSelect'
 import { StatusBadge } from './Badges'
 
-export default function DeficienciesPage({ onAdd }) {
+export default function DeficienciesPage({ onAdd, onViewStudent }) {
   const { deficiencies, students } = useData()
   const { refresh, loading } = useDeficiencies()
 
@@ -113,8 +113,6 @@ export default function DeficienciesPage({ onAdd }) {
         <style>{`
           .deficiency-actions .action-btn.resolve { color: var(--accent-green) !important; }
           .deficiency-actions .action-btn.resolve:hover { opacity: 0.9; }
-
-
         `}</style>
         <table className="data-table">
           <thead>
@@ -140,6 +138,7 @@ export default function DeficienciesPage({ onAdd }) {
                   key={d.student_id}
                   className={d.status === 'pending' ? 'hover-row' : ''}
                   style={{ cursor: d.status === 'pending' ? 'pointer' : 'default' }}
+                  onClick={() => onViewStudent?.(s)}
                 >
                   <td style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{index + 1}</td>
                   <td>
@@ -154,9 +153,7 @@ export default function DeficienciesPage({ onAdd }) {
                   <td><span className={`badge ${d.type.toLowerCase()}`}>{d.type}</span></td>
                   <td>{d.semester}</td>
                   <td>
-                    <span style={d.status === 'resolved' ? { color: 'var(--accent-green)' } : undefined}>
-                      <StatusBadge status={d.status} />
-                    </span>
+                    <StatusBadge status={d.status} />
                   </td>
 
                   <td className="actions-cell">
@@ -189,6 +186,7 @@ export default function DeficienciesPage({ onAdd }) {
                             color: 'rgba(52, 211, 153, 0.35)',
                             border: 'none',
                             cursor: 'not-allowed',
+                            opacity: 0.5,
                           }}
                         >
                           <i className="ph ph-check-circle" />

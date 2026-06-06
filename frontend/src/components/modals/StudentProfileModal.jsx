@@ -81,15 +81,6 @@ export default function StudentProfileModal({ isOpen, onClose, student, onEdit, 
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Student Profile" size="large">
-      <style>{`
-        /* Keep resolved deficiency badge green (same issue as DeficienciesPage) */
-        .status-badge.deficient.resolved {
-          background: rgba(52, 211, 153, 0.12) !important;
-          color: var(--accent-green) !important;
-          border: 1px solid rgba(52, 211, 153, 0.25) !important;
-        }
-      `}</style>
-
       <div
         className="modal-tabs"
         style={{ display: 'flex', gap: '8px', padding: '0 24px', borderBottom: '1px solid var(--border)' }}
@@ -405,6 +396,7 @@ export default function StudentProfileModal({ isOpen, onClose, student, onEdit, 
                                   color: 'rgba(52, 211, 153, 0.35)',
                                   border: 'none',
                                   cursor: 'not-allowed',
+                                  opacity: 0.5,
                                 }}
                               >
                                 <i className="ph ph-check-circle" />
