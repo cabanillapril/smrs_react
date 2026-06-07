@@ -8,6 +8,41 @@ export default function ImportGradeReport() {
     const [loading, setLoading] = useState(false)
     const [loadingPhase, setLoadingPhase] = useState('')
     const [error, setError] = useState('')
+    const [editingCell, setEditingCell] = useState({ index: null, field: null })
+
+    function handleAddRow() {
+        setPreview(prev => {
+            if (!prev) return null
+            const newRow = {
+                student_number: '00-0000',
+                student_name: 'New Student Name',
+                course: 'BSIT',
+                midterm_grade: null,
+                final_grade: null,
+                remark: 'INC',
+                enrollment_status: 'Active',
+                first_name: '',
+                middle_name: '',
+                last_name: ''
+            }
+            return {
+                ...prev,
+                rows: [...prev.rows, newRow]
+            }
+        })
+    }
+
+    function handleDeleteRow(index) {
+        setPreview(prev => {
+            if (!prev) return null
+            const updatedRows = [...prev.rows]
+            updatedRows.splice(index, 1)
+            return {
+                ...prev,
+                rows: updatedRows
+            }
+        })
+    }
 
     function handleFileChange(event) {
         setPreview(null)
@@ -15,6 +50,66 @@ export default function ImportGradeReport() {
         setError('')
         const nextFile = event.target.files?.[0]
         setFile(nextFile ?? null)
+    }
+
+    function handleMetadataChange(key, val) {
+        setPreview(prev => {
+            if (!prev) return null
+            return {
+                ...prev,
+                metadata: {
+                    ...prev.metadata,
+                    [key]: val
+                }
+            }
+        })
+    }
+
+    function handleRowChange(index, key, val) {
+        setPreview(prev => {
+            if (!prev) return null
+            const updatedRows = [...prev.rows]
+            updatedRows[index] = {
+                ...updatedRows[index],
+                [key]: val
+            }
+            return {
+                ...prev,
+                rows: updatedRows
+            }
+        })
+    }
+
+    function handleRowGradeChange(index, key, val) {
+        setPreview(prev => {
+            if (!prev) return null
+            const updatedRows = [...prev.rows]
+            const updatedRow = { ...updatedRows[index], [key]: val }
+            
+            // Recompute final grade and remark
+            const mid = updatedRow.midterm_grade
+            const fin = updatedRow.final_grade
+            let finalValue = null
+            if (mid !== null && fin !== null) {
+                finalValue = Math.round(((mid + fin) / 2) * 100) / 100
+            } else if (mid !== null) {
+                finalValue = mid
+            } else if (fin !== null) {
+                finalValue = fin
+            }
+            
+            let remark = 'INC'
+            if (finalValue !== null) {
+                remark = finalValue <= 3.0 ? 'Passed' : 'Failed'
+            }
+            updatedRow.remark = remark
+            
+            updatedRows[index] = updatedRow
+            return {
+                ...prev,
+                rows: updatedRows
+            }
+        })
     }
 
     async function previewImport() {
@@ -37,16 +132,19 @@ export default function ImportGradeReport() {
     }
 
     async function commitImport() {
-        if (!file) return
+        if (!preview) return
         setLoading(true)
         setLoadingPhase('Processing and importing grade records...')
         setError('')
         setResult(null)
 
         try {
-            const data = await importService.commitGradeReport(file)
-            setResult(data)
-            setPreview(data)
+            const data = await importService.commitGradeReportData(preview)
+            setResult({
+                commit: true,
+                created_grades: data.created_grades,
+                metadata: preview.metadata
+            })
             setLoadingPhase('')
         } catch (err) {
             setError(err.message || 'Failed to import Grade Report')
@@ -134,47 +232,86 @@ export default function ImportGradeReport() {
                         <div className="student-grid">
                             <div className="student-field">
                                 <span className="field-label">Subject Code</span>
-                                <span className="field-value">{preview.metadata.subject_code || 'N/A'}</span>
+                                <input
+                                    type="text"
+                                    className="preview-edit-input"
+                                    value={preview.metadata.subject_code || ''}
+                                    onChange={(e) => handleMetadataChange('subject_code', e.target.value)}
+                                />
                             </div>
                             <div className="student-field">
                                 <span className="field-label">Description</span>
-                                <span className="field-value">{preview.metadata.subject_description || 'N/A'}</span>
+                                <input
+                                    type="text"
+                                    className="preview-edit-input"
+                                    value={preview.metadata.subject_description || ''}
+                                    onChange={(e) => handleMetadataChange('subject_description', e.target.value)}
+                                />
                             </div>
                             <div className="student-field">
                                 <span className="field-label">Instructor</span>
-                                <span className="field-value">{preview.metadata.instructor || 'N/A'}</span>
+                                <input
+                                    type="text"
+                                    className="preview-edit-input"
+                                    value={preview.metadata.instructor || ''}
+                                    onChange={(e) => handleMetadataChange('instructor', e.target.value)}
+                                />
                             </div>
                             <div className="student-field">
                                 <span className="field-label">Academic Period</span>
-                                <span className="field-value">{preview.metadata.academic_period || 'N/A'}</span>
+                                <input
+                                    type="text"
+                                    className="preview-edit-input"
+                                    value={preview.metadata.academic_period || ''}
+                                    onChange={(e) => handleMetadataChange('academic_period', e.target.value)}
+                                />
                             </div>
                             <div className="student-field">
                                 <span className="field-label">Class / Section</span>
-                                <span className="field-value">{preview.metadata.class_section || 'N/A'}</span>
+                                <input
+                                    type="text"
+                                    className="preview-edit-input"
+                                    value={preview.metadata.class_section || ''}
+                                    onChange={(e) => handleMetadataChange('class_section', e.target.value)}
+                                />
                             </div>
-                            {preview.metadata.institution && (
-                                <div className="student-field">
-                                    <span className="field-label">Institution</span>
-                                    <span className="field-value">{preview.metadata.institution}</span>
-                                </div>
-                            )}
-                            {preview.metadata.campus && (
-                                <div className="student-field">
-                                    <span className="field-label">Campus</span>
-                                    <span className="field-value">{preview.metadata.campus}</span>
-                                </div>
-                            )}
-                            {preview.metadata.report_date && (
-                                <div className="student-field">
-                                    <span className="field-label">Date Generated</span>
-                                    <span className="field-value">{preview.metadata.report_date}</span>
-                                </div>
-                            )}
+                            <div className="student-field">
+                                <span className="field-label">Institution</span>
+                                <input
+                                    type="text"
+                                    className="preview-edit-input"
+                                    value={preview.metadata.institution || ''}
+                                    onChange={(e) => handleMetadataChange('institution', e.target.value)}
+                                />
+                            </div>
+                            <div className="student-field">
+                                <span className="field-label">Campus</span>
+                                <input
+                                    type="text"
+                                    className="preview-edit-input"
+                                    value={preview.metadata.campus || ''}
+                                    onChange={(e) => handleMetadataChange('campus', e.target.value)}
+                                />
+                            </div>
+                            <div className="student-field">
+                                <span className="field-label">Date Generated</span>
+                                <input
+                                    type="text"
+                                    className="preview-edit-input"
+                                    value={preview.metadata.report_date || ''}
+                                    onChange={(e) => handleMetadataChange('report_date', e.target.value)}
+                                />
+                            </div>
                         </div>
                     </div>
 
                     <div className="grades-card">
-                        <h4>Student Records ({preview.rows.length} rows)</h4>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                            <h4 style={{ margin: 0 }}>Student Records ({preview.rows.length} rows)</h4>
+                            <button className="btn btn-primary sm" onClick={handleAddRow}>
+                                <span className="btn-icon">+</span> Add Student Record
+                            </button>
+                        </div>
                         <div className="table-wrapper">
                             <table className="data-table">
                                 <thead>
@@ -186,25 +323,175 @@ export default function ImportGradeReport() {
                                         <th style={{ textAlign: 'center' }}>Final</th>
                                         <th>Remark</th>
                                         <th style={{ textAlign: 'center' }}>Status</th>
+                                        <th style={{ textAlign: 'center' }}>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {preview.rows.map((row, index) => (
                                         <tr key={`${row.student_number}-${index}`} className={row.enrollment_status?.toLowerCase() !== 'active' ? 'status-warning-row' : ''}>
-                                            <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem' }}>{row.student_number}</td>
-                                            <td style={{ fontWeight: 600 }}>{row.student_name}</td>
-                                            <td>{row.course}</td>
-                                            <td style={{ textAlign: 'center' }}>
-                                                <span className="grade-badge">{row.midterm_grade ?? '—'}</span>
+                                            <td>
+                                                {editingCell.index === index && editingCell.field === 'student_number' ? (
+                                                    <input
+                                                        type="text"
+                                                        className="preview-edit-input"
+                                                        style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem' }}
+                                                        value={row.student_number || ''}
+                                                        onChange={(e) => handleRowChange(index, 'student_number', e.target.value)}
+                                                        onBlur={() => setEditingCell({ index: null, field: null })}
+                                                        onKeyDown={(e) => { if (e.key === 'Enter') setEditingCell({ index: null, field: null }) }}
+                                                        autoFocus
+                                                    />
+                                                ) : (
+                                                    <span
+                                                        style={{ display: 'block', minHeight: '1.2em', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '0.85rem' }}
+                                                        onClick={() => setEditingCell({ index, field: 'student_number' })}
+                                                    >
+                                                        {row.student_number || '—'}
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td>
+                                                {editingCell.index === index && editingCell.field === 'student_name' ? (
+                                                    <input
+                                                        type="text"
+                                                        className="preview-edit-input"
+                                                        style={{ fontWeight: 600 }}
+                                                        value={row.student_name || ''}
+                                                        onChange={(e) => handleRowChange(index, 'student_name', e.target.value)}
+                                                        onBlur={() => setEditingCell({ index: null, field: null })}
+                                                        onKeyDown={(e) => { if (e.key === 'Enter') setEditingCell({ index: null, field: null }) }}
+                                                        autoFocus
+                                                    />
+                                                ) : (
+                                                    <span
+                                                        style={{ display: 'block', minHeight: '1.2em', cursor: 'pointer', fontWeight: 600 }}
+                                                        onClick={() => setEditingCell({ index, field: 'student_name' })}
+                                                    >
+                                                        {row.student_name || '—'}
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td>
+                                                {editingCell.index === index && editingCell.field === 'course' ? (
+                                                    <input
+                                                        type="text"
+                                                        className="preview-edit-input"
+                                                        value={row.course || ''}
+                                                        onChange={(e) => handleRowChange(index, 'course', e.target.value)}
+                                                        onBlur={() => setEditingCell({ index: null, field: null })}
+                                                        onKeyDown={(e) => { if (e.key === 'Enter') setEditingCell({ index: null, field: null }) }}
+                                                        autoFocus
+                                                    />
+                                                ) : (
+                                                    <span
+                                                        style={{ display: 'block', minHeight: '1.2em', cursor: 'pointer' }}
+                                                        onClick={() => setEditingCell({ index, field: 'course' })}
+                                                    >
+                                                        {row.course || '—'}
+                                                    </span>
+                                                )}
                                             </td>
                                             <td style={{ textAlign: 'center' }}>
-                                                <span className="grade-badge">{row.final_grade ?? '—'}</span>
+                                                {editingCell.index === index && editingCell.field === 'midterm_grade' ? (
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        className="preview-edit-input center"
+                                                        value={row.midterm_grade !== null && row.midterm_grade !== undefined ? row.midterm_grade : ''}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value === '' ? null : parseFloat(e.target.value)
+                                                            handleRowGradeChange(index, 'midterm_grade', val)
+                                                        }}
+                                                        onBlur={() => setEditingCell({ index: null, field: null })}
+                                                        onKeyDown={(e) => { if (e.key === 'Enter') setEditingCell({ index: null, field: null }) }}
+                                                        autoFocus
+                                                    />
+                                                ) : (
+                                                    <span
+                                                        className="grade-badge"
+                                                        style={{ cursor: 'pointer' }}
+                                                        onClick={() => setEditingCell({ index, field: 'midterm_grade' })}
+                                                    >
+                                                        {row.midterm_grade !== null && row.midterm_grade !== undefined ? row.midterm_grade : '—'}
+                                                    </span>
+                                                )}
                                             </td>
-                                            <td>{row.remark || '—'}</td>
                                             <td style={{ textAlign: 'center' }}>
-                                                <span className={`status-badge ${getStatusStyle(row.enrollment_status)}`}>
-                                                    {row.enrollment_status}
-                                                </span>
+                                                {editingCell.index === index && editingCell.field === 'final_grade' ? (
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        className="preview-edit-input center"
+                                                        value={row.final_grade !== null && row.final_grade !== undefined ? row.final_grade : ''}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value === '' ? null : parseFloat(e.target.value)
+                                                            handleRowGradeChange(index, 'final_grade', val)
+                                                        }}
+                                                        onBlur={() => setEditingCell({ index: null, field: null })}
+                                                        onKeyDown={(e) => { if (e.key === 'Enter') setEditingCell({ index: null, field: null }) }}
+                                                        autoFocus
+                                                    />
+                                                ) : (
+                                                    <span
+                                                        className="grade-badge"
+                                                        style={{ cursor: 'pointer' }}
+                                                        onClick={() => setEditingCell({ index, field: 'final_grade' })}
+                                                    >
+                                                        {row.final_grade !== null && row.final_grade !== undefined ? row.final_grade : '—'}
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td>
+                                                {editingCell.index === index && editingCell.field === 'remark' ? (
+                                                    <input
+                                                        type="text"
+                                                        className="preview-edit-input"
+                                                        value={row.remark || ''}
+                                                        onChange={(e) => handleRowChange(index, 'remark', e.target.value)}
+                                                        onBlur={() => setEditingCell({ index: null, field: null })}
+                                                        onKeyDown={(e) => { if (e.key === 'Enter') setEditingCell({ index: null, field: null }) }}
+                                                        autoFocus
+                                                    />
+                                                ) : (
+                                                    <span
+                                                        style={{ display: 'block', minHeight: '1.2em', cursor: 'pointer' }}
+                                                        onClick={() => setEditingCell({ index, field: 'remark' })}
+                                                    >
+                                                        {row.remark || '—'}
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td style={{ textAlign: 'center' }}>
+                                                {editingCell.index === index && editingCell.field === 'enrollment_status' ? (
+                                                    <select
+                                                        className="preview-edit-select"
+                                                        value={row.enrollment_status || 'Active'}
+                                                        onChange={(e) => handleRowChange(index, 'enrollment_status', e.target.value)}
+                                                        onBlur={() => setEditingCell({ index: null, field: null })}
+                                                        autoFocus
+                                                    >
+                                                        <option value="Active">Active</option>
+                                                        <option value="Dropped">Dropped</option>
+                                                        <option value="Officially Dropped">Officially Dropped</option>
+                                                        <option value="Unofficially Dropped">Unofficially Dropped</option>
+                                                    </select>
+                                                ) : (
+                                                    <span
+                                                        className={`status-badge ${getStatusStyle(row.enrollment_status)}`}
+                                                        style={{ cursor: 'pointer' }}
+                                                        onClick={() => setEditingCell({ index, field: 'enrollment_status' })}
+                                                    >
+                                                        {row.enrollment_status}
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td style={{ textAlign: 'center' }}>
+                                                <button
+                                                    className="btn btn-danger sm"
+                                                    onClick={() => handleDeleteRow(index)}
+                                                >
+                                                    Delete
+                                                </button>
                                             </td>
                                         </tr>
                                     ))}

@@ -193,6 +193,18 @@ export const importService = {
 
     return res.json()
   },
+  async commitGradeReportData(data) {
+    return apiFetch('/import/grade-report/commit', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+  async commitAppraisalData(data) {
+    return apiFetch('/import/appraisal/commit', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
 }
 
 export default apiFetch

@@ -2204,3 +2204,54 @@ textarea {
   border-radius: 4px;
   color: var(--text-primary);
 }
+
+/* Editable Preview Inputs */
+.preview-edit-input {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: 6px 10px;
+  font-size: 0.9rem;
+  outline: none;
+  transition: all 0.15s ease;
+  width: 100%;
+}
+
+.preview-edit-input:focus {
+  border-color: var(--accent-blue);
+  background: var(--bg-hover);
+  box-shadow: 0 0 0 2px rgba(91, 142, 240, 0.15);
+}
+
+.data-table .preview-edit-input {
+  padding: 4px 8px;
+  font-size: 0.85rem;
+}
+
+.data-table .preview-edit-input.center {
+  text-align: center;
+}
+
+.preview-edit-select {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: 6px 10px;
+  font-size: 0.9rem;
+  outline: none;
+  transition: all 0.15s ease;
+  width: 100%;
+  cursor: pointer;
+}
+
+.preview-edit-select:focus {
+  border-color: var(--accent-blue);
+  background: var(--bg-hover);
+}
+
+.data-table .preview-edit-select {
+  padding: 4px 8px;
+  font-size: 0.85rem;
+}
