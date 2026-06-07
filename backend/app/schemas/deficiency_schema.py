@@ -12,6 +12,7 @@ class DeficiencyCreate(BaseModel):
     deadline: Optional[str] = None
     remarks: Optional[str] = None
     date_recorded: Optional[str] = None
+    school_year: Optional[str] = None
 
 
 class DeficiencyResolve(BaseModel):
@@ -29,6 +30,7 @@ class DeficiencyOut(BaseModel):
     remarks: Optional[str]
     date_recorded: Optional[str]
     date_resolved: Optional[str]
+    school_year: Optional[str]
     # Joined
     student_name: Optional[str] = None
     subject_code: Optional[str] = None

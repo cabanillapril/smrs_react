@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react'
 import { useData } from '../context/AppContext'
 import { SECTIONS, PROGRAMS, YEAR_LEVELS, STATUSES } from '../utils/constants'
 import { useStudents } from '../hooks/useStudents'
+import { studentService } from '../services/api'
 import MajorSelect from './MajorSelect'
 import { StatusBadge } from './Badges'
 
 export default function StudentsPage({ onEdit, onView, onAdd, globalSearch = '' }) {
-  const { students } = useData()
+  const { students, grades } = useData()
   const { refresh, loading } = useStudents()
 
   const [search, setSearch] = useState('')
@@ -16,8 +17,13 @@ export default function StudentsPage({ onEdit, onView, onAdd, globalSearch = '' 
   const [section, setSection] = useState('')
   const [status, setStatus] = useState('')
   const [showGraduated, setShowGraduated] = useState(false)
+  const [sortBy, setSortBy] = useState('default')
+  const [semester, setSemester] = useState('')
+  const [schoolYear, setSchoolYear] = useState('')
 
-  const filtered = students.filter((s) => {
+  const availableSchoolYears = [...new Set(grades.map(g => g.school_year).filter(Boolean))].sort((a, b) => b.localeCompare(a))
+
+  let filtered = students.filter((s) => {
     if (!showGraduated && s.status === 'Graduated') return false
     const matchesSearch =
       (s.first_name + ' ' + s.last_name).toLowerCase().includes(search.toLowerCase()) ||
@@ -29,8 +35,22 @@ export default function StudentsPage({ onEdit, onView, onAdd, globalSearch = '' 
     const matchesSection = !section || s.section === section
     const matchesStatus = !status || s.status === status
 
-    return matchesSearch && matchesCourse && matchesMajor && matchesYear && matchesSection && matchesStatus
+    const studentGrades = grades.filter(g => g.student_id === s.student_id)
+    const matchesSemester = !semester || studentGrades.some(g => String(g.semester) === String(semester))
+    const matchesSchoolYear = !schoolYear || studentGrades.some(g => g.school_year === schoolYear)
+
+    return matchesSearch && matchesCourse && matchesMajor && matchesYear && matchesSection && matchesStatus && matchesSemester && matchesSchoolYear
   })
+
+  if (sortBy === 'alpha') {
+    filtered.sort((a, b) => {
+      const nameA = `${a.last_name}, ${a.first_name}`.toLowerCase()
+      const nameB = `${b.last_name}, ${b.first_name}`.toLowerCase()
+      return nameA.localeCompare(nameB)
+    })
+  } else if (sortBy === 'date') {
+    filtered.sort((a, b) => b.student_number - a.student_number)
+  }
 
   function resetFilters() {
     setSearch('')
@@ -39,6 +59,20 @@ export default function StudentsPage({ onEdit, onView, onAdd, globalSearch = '' 
     setYear('')
     setSection('')
     setStatus('')
+    setSortBy('default')
+    setSemester('')
+    setSchoolYear('')
+  }
+
+  async function handlePromote() {
+    if (!confirm('Are you sure you want to promote all active students to the next year level? Graduates will not be affected.')) return
+    try {
+      const res = await studentService.promote()
+      alert(res.message)
+      refresh()
+    } catch (e) {
+      alert(e.message)
+    }
   }
 
   useEffect(() => {
@@ -55,6 +89,9 @@ export default function StudentsPage({ onEdit, onView, onAdd, globalSearch = '' 
         <div className="page-actions">
           <button className="btn btn-ghost" onClick={refresh} disabled={loading}>
             <i className={`ph ph-arrows-clockwise ${loading ? 'ph-spin' : ''}`} /> Refresh
+          </button>
+          <button className="btn btn-ghost" onClick={handlePromote}>
+            <i className="ph ph-arrow-circle-up" /> Promote Year Levels
           </button>
           <button className="btn btn-primary" onClick={onAdd}>+ New Student</button>
         </div>
@@ -99,6 +136,27 @@ export default function StudentsPage({ onEdit, onView, onAdd, globalSearch = '' 
           {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
 
+        <select className="filter-select" value={semester} onChange={(e) => setSemester(e.target.value)}>
+          <option value="">All Semesters</option>
+          <option value="1">1st Semester</option>
+          <option value="2">2nd Semester</option>
+          <option value="3">Summer</option>
+        </select>
+
+        <select className="filter-select" value={schoolYear} onChange={(e) => setSchoolYear(e.target.value)}>
+          <option value="">All School Years</option>
+          {availableSchoolYears.map(sy => <option key={sy} value={sy}>{sy}</option>)}
+        </select>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto', marginRight: '16px' }}>
+          <i className="ph ph-sort-ascending" style={{ color: 'var(--text-muted)' }} />
+          <select className="filter-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ padding: '6px 12px' }}>
+            <option value="default">Sort by...</option>
+            <option value="alpha">Alphabetical (A-Z)</option>
+            <option value="date">Date Added (Newest)</option>
+          </select>
+        </div>
+
         <button className="btn btn-ghost" onClick={resetFilters}>Reset</button>
         <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginLeft: 8 }}>
           <input type="checkbox" checked={showGraduated} onChange={(e) => setShowGraduated(e.target.checked)} />
@@ -130,7 +188,7 @@ export default function StudentsPage({ onEdit, onView, onAdd, globalSearch = '' 
                 <td style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{index + 1}</td>
                 <td>
                   <span className="id-cell" style={{ color: 'var(--accent-blue)' }}>
-                    {s.student_id || s.student_number}
+                    {s.student_id && !s.student_id.startsWith('TMP-') ? s.student_id : "-"}
                   </span>
                 </td>
                 <td>

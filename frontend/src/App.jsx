@@ -11,8 +11,10 @@ import DeficienciesPage from './components/DeficienciesPage'
 import GradesPage from './components/GradesPage'
 import CurriculumPage from './components/CurriculumPage'
 import ReportsPage from './components/ReportsPage'
+import ImportCORPage from './components/ImportCORPage'
 import ImportAppraisalPage from './components/ImportAppraisalPage'
 import ImportGradeReport from './components/ImportGradeReport'
+
 
 
 import AddStudentModal from './components/modals/AddStudentModal'
@@ -40,7 +42,7 @@ export default function App() {
   const [profileInitialTab, setProfileInitialTab] = useState(null)
 
   const toast = useToast()
-  const { setStudents, setDeficiencies, setGrades, setSubjects, addActivity } = useData()
+  const { students, setStudents, setDeficiencies, setGrades, setSubjects, addActivity } = useData()
 
   // Modals
   const logoutModal = useModal()
@@ -103,6 +105,31 @@ export default function App() {
     setCurrentPage('dashboard')
   }
 
+  async function handleViewStudentById(studentId) {
+    try {
+      // First try to find the student in the already-loaded context (fast, no extra API call)
+      let student = students.find(
+        (s) => s.student_id === studentId || String(s.student_number) === String(studentId)
+      )
+      if (!student) {
+        // Not found - might be a freshly-created student; refresh the list and search the fresh data
+        const freshList = await refreshStudents()
+        student = (freshList || []).find(
+          (s) => s.student_id === studentId || String(s.student_number) === String(studentId)
+        )
+      }
+      if (!student) {
+        toast('Student not found in database.', 'error')
+        return
+      }
+      setProfileInitialTab('profile')
+      setSelectedStudent(student)
+      profileModal.open()
+    } catch (err) {
+      toast(`Failed to load student details: ${err.message}`, 'error')
+    }
+  }
+
 
   if (!user) {
     return <LoginPage onLogin={handleLogin} />
@@ -157,12 +184,14 @@ export default function App() {
             }}
           />
         )
+      case 'import-cor':
+        return <ImportCORPage onActivity={addActivity} onViewStudent={handleViewStudentById} />
       case 'reports':
         return <ReportsPage />
       case 'import':
-        return <ImportAppraisalPage />
+        return <ImportAppraisalPage onActivity={addActivity} />
       case 'import-grade':
-        return <ImportGradeReport />
+        return <ImportGradeReport onActivity={addActivity} />
       default:
         return <DashboardPage stats={stats} />
     }

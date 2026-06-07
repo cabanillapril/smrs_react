@@ -1,0 +1,14 @@
+{
+  "name": "smrs-backend",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "uvicorn app.main:app --host 127.0.0.1 --port 8000",
+    "start-python": "python -m uvicorn app.main:app --host 127.0.0.1 --port 8000",
+    "test-appraisal": "python ../test_appraisal_e2e.py",
+    "test-regex": "python ../test_regex.py",
+    "test-live": "python ../test_live_api.py",
+    "inspect-pdf": "python C:/Users/lenovo/.gemini/antigravity-ide/scratch/inspect_pdf.py",
+    "query-db": "python C:/Users/lenovo/.gemini/antigravity-ide/scratch/query_db.py",
+    "check-missing": "python C:/Users/lenovo/.gemini/antigravity-ide/scratch/check_missing_students.py"
+  }
+}

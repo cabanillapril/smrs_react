@@ -9,7 +9,6 @@ def _enrich(grade: Grade, db: Session) -> dict:
     student = db.query(Student).filter(Student.student_id == grade.student_id).first()
     subject = db.query(Subject).filter(Subject.subject_id == grade.subject_id).first()
     d["student_name"] = f"{student.last_name}, {student.first_name}" if student else None
-    d["student_id"]   = student.student_id if student else None
     d["subject_code"] = subject.subject_code if subject else None
     d["subject_name"] = subject.subject_name if subject else None
     d["unit"]         = subject.unit if subject else None

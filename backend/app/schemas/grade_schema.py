@@ -3,7 +3,7 @@ from typing import Optional
 
 
 class GradeCreate(BaseModel):
-    student_id: str
+    student_id: Optional[str] = None
     subject_id: Optional[int] = None
     semester: Optional[int] = 1
     school_year: Optional[str] = None
@@ -11,6 +11,7 @@ class GradeCreate(BaseModel):
     finals: Optional[float] = None
     grade: float
     remarks: Optional[str] = None
+    instructor: Optional[str] = None
 
 
 class GradeUpdate(BaseModel):
@@ -18,11 +19,12 @@ class GradeUpdate(BaseModel):
     finals: Optional[float] = None
     grade: Optional[float] = None
     remarks: Optional[str] = None
+    instructor: Optional[str] = None
 
 
 class GradeOut(BaseModel):
     grade_id: int
-    student_id: str
+    student_id: Optional[str] = None
     subject_id: int
     semester: Optional[int]
     school_year: Optional[str]
@@ -30,6 +32,7 @@ class GradeOut(BaseModel):
     finals: Optional[float]
     grade: float
     remarks: Optional[str]
+    instructor: Optional[str] = None
     # Joined fields
     student_name: Optional[str] = None
     subject_code: Optional[str] = None

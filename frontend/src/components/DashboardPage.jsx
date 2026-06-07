@@ -1,4 +1,11 @@
 import { useData } from '../context/AppContext'
+import { courseMatches } from '../utils/courseUtils'
+import {
+  PROGRAM_BSIT,
+  PROGRAM_BSMAT,
+  PROGRAM_2YEAR,
+  PROGRAM_1YEAR,
+} from '../utils/courseUtils'
 
 const YEAR_ORDINALS = ['', '1st', '2nd', '3rd', '4th']
 
@@ -7,16 +14,16 @@ export default function DashboardPage({ stats, onNavigate, onAddStudent, user })
 
   // Bar chart data
   const courseConfigs = [
-    { label: 'BSIT', search: 'Bachelor of Science in Industrial Technology', years: 4 },
-    { label: 'BSMAT', search: 'Bachelor of Science in Mechatronics and Automation Technology', years: 4 },
-    { label: '2-Year', search: '2-Year Program', years: 2 },
-    { label: '1-Year', search: '1-Year Program', years: 1 },
+    { label: 'BSIT',   program: PROGRAM_BSIT,  years: 4 },
+    { label: 'BSMAT',  program: PROGRAM_BSMAT, years: 4 },
+    { label: '2-Year', program: PROGRAM_2YEAR, years: 2 },
+    { label: '1-Year', program: PROGRAM_1YEAR, years: 1 },
   ]
 
   const counts = courseConfigs.map((c) =>
     Array.from({ length: c.years }, (_, i) =>
       students.filter(
-        (s) => (s.course || '').includes(c.search) && s.year_level === i + 1 && s.status !== 'Graduated'
+        (s) => courseMatches(s.course, c.program) && s.year_level === i + 1 && s.status !== 'Graduated'
       ).length
     )
   )

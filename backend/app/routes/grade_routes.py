@@ -8,6 +8,7 @@ from ..schemas.grade_schema import GradeUpdate, GradeOut
 from ..models.grade_model import Grade
 from ..models.subjects_model import Subject
 from ..models.students_model import Student
+from .import_routes import sync_deficiency_from_grade
 
 router = APIRouter()
 
@@ -94,6 +95,7 @@ def create_grade(data: GradeIn, db: Session = Depends(get_db)):
     db.add(entry)
     db.commit()
     db.refresh(entry)
+    sync_deficiency_from_grade(db, entry.student_id, entry.subject_id, entry.semester, entry.remarks, entry.school_year)
     return _enrich(entry, db)
 
 
@@ -102,6 +104,7 @@ def update_grade(grade_id: int, data: GradeUpdate, db: Session = Depends(get_db)
     grade = grade_repo.update(db, grade_id, data)
     if not grade:
         raise HTTPException(status_code=404, detail="Grade not found")
+    sync_deficiency_from_grade(db, grade["student_id"], grade["subject_id"], grade["semester"], grade["remarks"], grade["school_year"])
     return grade
 
 

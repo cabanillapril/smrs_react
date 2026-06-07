@@ -65,9 +65,11 @@ export const authService = {
 export const studentService = {
   getAll: () => apiFetch('/students/getall'),
   getById: (id) => apiFetch(`/students/${id}`),
+  getGwa: (id) => apiFetch(`/students/${id}/gwa`),
   create: (data) => apiFetch('/students/', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => apiFetch(`/students/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id) => apiFetch(`/students/${id}`, { method: 'DELETE' }),
+  promote: () => apiFetch('/students/promote', { method: 'POST' }),
 }
 
 export const deficiencyService = {
@@ -88,6 +90,13 @@ export const gradeService = {
   create: (data) => apiFetch('/grades/', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => apiFetch(`/grades/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id) => apiFetch(`/grades/${id}`, { method: 'DELETE' }),
+}
+
+export const enrollmentService = {
+  getByStudent: (studentNumber) => apiFetch(`/enrollments/student/${studentNumber}`),
+  create: (data) => apiFetch('/enrollments/', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id, data) => apiFetch(`/enrollments/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  delete: (id) => apiFetch(`/enrollments/${id}`, { method: 'DELETE' }),
 }
 
 export const subjectService = {
@@ -113,6 +122,7 @@ export const dashboardService = {
 }
 
 export const importService = {
+  getLogs: () => apiFetch('/import/logs'),
   async preview(file) {
     const formData = new FormData()
     formData.append('file', file)
@@ -201,6 +211,28 @@ export const importService = {
   },
   async commitAppraisalData(data) {
     return apiFetch('/import/appraisal/commit', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+  async previewCOR(file) {
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await fetch(API_BASE + '/import/cor/preview', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+      },
+    })
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}))
+      throw new Error(errBody.detail || `HTTP ${res.status}`)
+    }
+    return res.json()
+  },
+  async commitCOR(data) {
+    return apiFetch('/import/cor/commit', {
       method: 'POST',
       body: JSON.stringify(data),
     })

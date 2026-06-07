@@ -3,7 +3,6 @@ import Modal from '../Modal'
 
 import { FormGroup, FormInput, FormSelect } from '../Form'
 import { gradeService } from '../../services/api'
-import { SEMESTERS } from '../../utils/constants'
 
 export default function EditGradeModal({ isOpen, onClose, onSaved, grade }) {
     const [form, setForm] = useState({
@@ -11,7 +10,9 @@ export default function EditGradeModal({ isOpen, onClose, onSaved, grade }) {
         finals: '',
         grade: '',
         remarks: '',
-        semester: SEMESTERS[0],
+        instructor: '',
+        semester: '1',
+        school_year: '',
     })
 
     const [loading, setLoading] = useState(false)
@@ -24,7 +25,9 @@ export default function EditGradeModal({ isOpen, onClose, onSaved, grade }) {
             finals: grade.finals ?? '',
             grade: grade.grade ?? '',
             remarks: grade.remarks ?? '',
-            semester: grade.semester ?? SEMESTERS[0],
+            instructor: grade.instructor ?? '',
+            semester: String(grade.semester ?? '1'),
+            school_year: grade.school_year ?? '',
         })
     }, [isOpen, grade])
 
@@ -41,6 +44,9 @@ export default function EditGradeModal({ isOpen, onClose, onSaved, grade }) {
                 finals: form.finals !== '' ? parseFloat(form.finals) : null,
                 grade: form.grade !== '' ? parseFloat(form.grade) : null,
                 remarks: form.remarks !== '' ? form.remarks : null,
+                instructor: form.instructor !== '' ? form.instructor : null,
+                semester: parseInt(form.semester),
+                school_year: form.school_year !== '' ? form.school_year : null,
             })
             onSaved?.()
             onClose()
@@ -63,6 +69,10 @@ export default function EditGradeModal({ isOpen, onClose, onSaved, grade }) {
                     <b>{grade?.subject_code}</b> — {grade?.student_name || grade?.student_id}
                 </div>
 
+                <FormGroup label="Instructor">
+                    <FormInput value={form.instructor} onChange={(e) => set('instructor', e.target.value)} placeholder="Instructor Name (Optional)" />
+                </FormGroup>
+
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                     <FormGroup label="Midterm Grade">
                         <FormInput type="number" step="0.25" value={form.midterm} onChange={(e) => set('midterm', e.target.value)} placeholder="1.0-5.0" />
@@ -83,13 +93,18 @@ export default function EditGradeModal({ isOpen, onClose, onSaved, grade }) {
                     </FormGroup>
                 </div>
 
-                <FormGroup label="Semester">
-                    <FormSelect value={form.semester} onChange={(e) => set('semester', e.target.value)} disabled>
-                        {SEMESTERS.map((s) => (
-                            <option key={s} value={s}>{s}</option>
-                        ))}
-                    </FormSelect>
-                </FormGroup>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <FormGroup label="Semester">
+                        <FormSelect value={form.semester} onChange={(e) => set('semester', e.target.value)}>
+                            <option value="1">1st Semester</option>
+                            <option value="2">2nd Semester</option>
+                            <option value="3">Summer</option>
+                        </FormSelect>
+                    </FormGroup>
+                    <FormGroup label="School Year">
+                        <FormInput value={form.school_year} onChange={(e) => set('school_year', e.target.value)} placeholder="eg. 2025-2026" />
+                    </FormGroup>
+                </div>
             </div>
 
             <div className="modal-footer">

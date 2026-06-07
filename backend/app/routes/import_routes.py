@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
-import io
+from sqlalchemy import text, or_
+import io, sqlalchemy
 import os
 import re
 from typing import List, Optional, Dict, Any
@@ -9,8 +10,12 @@ from ..database.db import get_db
 from ..models.students_model import Student
 from ..models.subjects_model import Subject
 from ..models.grade_model import Grade
+from ..models.deficiencies_model import Deficiency
+from ..models.import_log_model import ImportLog
+from ..models.enrollment_model import Enrollment
 from ..schemas.student_schema import StudentCreate
 from ..repository import student_repo
+from datetime import date, datetime
 
 try:
     from PIL import Image
@@ -36,6 +41,7 @@ class AppraisalSubject(BaseModel):
     midterm_grade: Optional[float] = None
     final_grade: Optional[float] = None
     semester: Optional[int] = 1
+    school_year: Optional[str] = ""
     instructor: Optional[str] = ""
 
 class AppraisalCommitIn(BaseModel):
@@ -51,13 +57,17 @@ class GradeReportStudentRow(BaseModel):
     course: str
     midterm_grade: Optional[float] = None
     final_grade: Optional[float] = None
+    remark: Optional[str] = None
     enrollment_status: str
+    student_status: str
 
 class GradeReportMetadata(BaseModel):
     subject_code: str
     subject_description: str
     instructor: str
     academic_period: str
+    school_year: Optional[str] = ""
+    semester: Optional[int] = 1
     institution: Optional[str] = None
     campus: Optional[str] = None
     report_date: Optional[str] = None
@@ -104,6 +114,19 @@ def is_tesseract_available() -> bool:
     return False
 
 
+def extract_pdf_native_text(data: bytes) -> str:
+    """Extract embedded text from a PDF using pypdfium2 (no OCR needed for text-based PDFs)."""
+    document = pdfium.PdfDocument(io.BytesIO(data))
+    pages: List[str] = []
+    for page_index in range(len(document)):
+        page = document.get_page(page_index)
+        textpage = page.get_textpage()
+        text = textpage.get_text_range()
+        page.close()
+        pages.append(text)
+    return '\n'.join(pages)
+
+
 def ocr_pdf_bytes(data: bytes) -> str:
     document = pdfium.PdfDocument(io.BytesIO(data))
     pages: List[str] = []
@@ -114,6 +137,16 @@ def ocr_pdf_bytes(data: bytes) -> str:
         page.close()
         pages.append(pytesseract.image_to_string(image, lang='eng', config='--psm 6'))
     return '\n'.join(pages)
+
+
+def is_text_pdf(data: bytes) -> bool:
+    """Return True if the PDF has embedded/selectable text (not just scanned images)."""
+    try:
+        text = extract_pdf_native_text(data)
+        # Consider it a text PDF if we can extract at least 100 meaningful characters
+        return len(text.strip()) > 100
+    except Exception:
+        return False
 
 
 def ocr_image_bytes(data: bytes) -> str:
@@ -133,22 +166,115 @@ def parse_name_field(raw_name: str) -> tuple[str, Optional[str], str]:
     raw_name = raw_name.strip()
     if ',' in raw_name:
         parts = [p.strip() for p in raw_name.split(',', 1)]
-        last = parts[0]
+        last = parts[0].title()
         rest = parts[1] if len(parts) > 1 else ''
         tokens = rest.split()
-        first = tokens[0] if tokens else ''
-        middle = ' '.join(tokens[1:]) if len(tokens) > 1 else None
+        if len(tokens) > 1:
+            first = ' '.join(tokens[:-1]).title()
+            middle = tokens[-1].title()
+        else:
+            first = tokens[0].title() if tokens else ''
+            middle = None
         return first, middle, last
     tokens = raw_name.split()
     if len(tokens) >= 2:
-        return tokens[0], ' '.join(tokens[1:-1]) if len(tokens) > 2 else None, tokens[-1]
-    return raw_name, None, raw_name
+        if len(tokens) > 2:
+            first = ' '.join(tokens[:-2]).title()
+            middle = tokens[-2].title()
+            last = tokens[-1].title()
+        else:
+            first = tokens[0].title()
+            last = tokens[-1].title()
+            middle = None
+        return first, middle, last
+    return raw_name.title(), None, raw_name.title()
 
 
 def normalize_student_id(first: str, last: str) -> str:
     candidate = f'{last}{first}'.strip()
     candidate = re.sub(r'[^A-Za-z0-9]', '', candidate)
     return candidate.upper() or 'UNKNOWN'
+
+
+
+# ---------------------------------------------------------------------------
+# Course code normalization
+# ---------------------------------------------------------------------------
+
+# Maps shorthand course codes (upper-cased, stripped) to canonical full names
+# used by the dashboard charts and student records.
+_COURSE_NORM_MAP = {
+    # 2-Year Technical Courses
+    'ELECTRO':           'Two-Year Technical Course',
+    'ELECTRONICS':       'Two-Year Technical Course',
+    'ELECTRI':           'Two-Year Technical Course',
+    'ELECTRICAL':        'Two-Year Technical Course',
+    'AUTO':              'Two-Year Technical Course',
+    'AUTOMOTIVE':        'Two-Year Technical Course',
+    'AMAT':              'Two-Year Technical Course',  # Associate in Mechatronics
+
+    # Bachelor of Science in Industrial Technology (BSIT variants)
+    'BSIT':              'Bachelor of Science in Industrial Technology',
+    'BSIT-ELECTRI':      'Bachelor of Science in Industrial Technology',
+    'BSIT-ELECTRICAL':   'Bachelor of Science in Industrial Technology',
+    'BSIT-ELECTRO':      'Bachelor of Science in Industrial Technology',
+    'BSIT-ELECTRONICS':  'Bachelor of Science in Industrial Technology',
+    'BSIT-AUTO':         'Bachelor of Science in Industrial Technology',
+    'BSIT-AUTOMOTIVE':   'Bachelor of Science in Industrial Technology',
+
+    # Bachelor of Science in Mechatronics and Automation Technology
+    'BSMAT':             'Bachelor of Science in Mechatronics and Automation Technology',
+    'BS MAT':            'Bachelor of Science in Mechatronics and Automation Technology',
+    'BS-MAT':            'Bachelor of Science in Mechatronics and Automation Technology',
+}
+
+# Major mapping for shorthand codes (used to populate the major field)
+_COURSE_MAJOR_MAP = {
+    'ELECTRO':           'Electronics Technology',
+    'ELECTRONICS':       'Electronics Technology',
+    'BSIT-ELECTRO':      'Electronics Technology',
+    'BSIT-ELECTRONICS':  'Electronics Technology',
+    'ELECTRI':           'Electrical Technology',
+    'ELECTRICAL':        'Electrical Technology',
+    'BSIT-ELECTRI':      'Electrical Technology',
+    'BSIT-ELECTRICAL':   'Electrical Technology',
+    'AUTO':              'Automotive Technology',
+    'AUTOMOTIVE':        'Automotive Technology',
+    'BSIT-AUTO':         'Automotive Technology',
+    'BSIT-AUTOMOTIVE':   'Automotive Technology',
+    'AMAT':              'Associate in Mechatronics and Automation Technology',
+}
+
+
+def normalize_course(raw_course: Optional[str]) -> tuple[Optional[str], Optional[str]]:
+    """Normalize a raw course string from OCR/import into a canonical program name.
+
+    Returns a (course, major) tuple.  If no normalization rule matches, the
+    original value is returned unchanged (so manually-entered full names are
+    preserved).
+    """
+    if not raw_course:
+        return raw_course, None
+
+    key = raw_course.strip().upper().replace(' ', '-')
+    # Try exact match first, then try the base prefix (e.g. 'BSIT-ELECTRI-2' → 'BSIT-ELECTRI')
+    full_name = _COURSE_NORM_MAP.get(key)
+    if full_name is None:
+        # Try progressively shorter prefixes for hyphenated codes
+        parts = key.split('-')
+        for end in range(len(parts), 0, -1):
+            candidate = '-'.join(parts[:end])
+            if candidate in _COURSE_NORM_MAP:
+                full_name = _COURSE_NORM_MAP[candidate]
+                key = candidate
+                break
+
+    if full_name:
+        major = _COURSE_MAJOR_MAP.get(key)
+        return full_name, major
+
+    # Not a known shorthand — return original to preserve manually-entered full names
+    return raw_course, None
 
 
 def find_field(text: str, label: str) -> Optional[str]:
@@ -167,7 +293,7 @@ def find_field(text: str, label: str) -> Optional[str]:
                     value = next_line
 
             # Better label terminators to handle multi-field lines
-            return re.split(r'\s+(Home Address|Major|Course|College|Instructor|Subject|Period|Date|Campus|Description|Generated|Descriptive|Remarks)', value, flags=re.IGNORECASE)[0].strip()
+            return re.split(r'\s+(Home Address|Major|Course|College|Instructor|Subject|Period|Date|Campus|Description|Generated|Descriptive|Remarks|Class|Section|Institution|University)', value, flags=re.IGNORECASE)[0].strip()
     return None
 
 
@@ -189,6 +315,11 @@ def extract_grade_report_data(text: str) -> dict:
         'class_section': find_field(text, "Class/Section") or "",
         'students': []
     }
+    
+    # Pre-parse period to fill school_year and semester fields for the UI
+    p_sem, p_sy = parse_academic_period(data['academic_period'])
+    data['school_year'] = p_sy or ""
+    data['semester'] = p_sem or 1
 
     id_pattern = re.compile(r'\b(\d{2}-\d{4,6})\b')
     date_pattern = re.compile(r'(\d{2}/\d{2}/\d{2,4})')
@@ -206,13 +337,14 @@ def extract_grade_report_data(text: str) -> dict:
             continue
 
         student_number = id_match.group(1)
-        
+
         # Normalize noise and markers (OCR often produces symbols for table borders)
         clean = re.sub(r'[\[\]_|{}\t]', ' ', line)
         clean = re.sub(r'\s+', ' ', clean).strip()
 
         # 1. Identify Remark, Date, and Grades
         enrollment_status = 'Active'
+        student_status = 'Regular'
         remark_found = remark_pattern.search(clean)
         if remark_found:
             rem_keyword = remark_found.group(1).upper()
@@ -286,6 +418,7 @@ def extract_grade_report_data(text: str) -> dict:
             'final_grade': final_grade,
             'remark': remark_found.group(1) if remark_found else '',
             'enrollment_status': enrollment_status,
+            'student_status': student_status,
             'date_posted': date_posted
         })
 
@@ -313,13 +446,240 @@ def parse_academic_period(period_str: str) -> tuple[Optional[int], Optional[str]
 # Appraisal (student appraisal / grades-per-student) extraction
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# UNP Appraisal-specific extraction helpers
+# ---------------------------------------------------------------------------
+
+# Maps ordinal words to year numbers
+_YEAR_ORDINAL = {'first': 1, 'second': 2, 'third': 3, 'fourth': 4, 'fifth': 5}
+# Maps semester labels to integers
+_SEM_MAP = {'first': 1, '1st': 1, 'second': 2, '2nd': 2, 'summer': 3}
+
+# Section header pattern: e.g. "First Year - First Semester" or "Second Year - Second Semester"
+_SECTION_HEADER = re.compile(
+    r'(First|Second|Third|Fourth|Fifth)\s+Year\s*[-\u2013\u2014]\s*(First|Second|Summer)\s+Semester',
+    re.IGNORECASE,
+)
+
+# Subject line WITH grades — primary: code includes letter tokens + course number
+# e.g. "ELEX 121", "Ind Draw 101", "Soc Sci 101", "Math 101", "PATHFIT 101", "NSTP 1"
+_SUBJECT_WITH_GRADES_NUMBERED = re.compile(
+    r'^'
+    r'(?P<code>[A-Za-z][A-Za-z0-9]*(?:\s+[A-Za-z][A-Za-z0-9]*)?\s+\d+(?:\s+\d+)?)'
+    r'\s+'
+    r'(?P<title>.+?)'
+    r'\s+(?P<units>\(?\d+\)?)'
+    r'\s+(?P<mid>\d+\.\d+)'
+    r'\s+(?P<fin>\d+\.\d+)'
+    r'\s+(?:1st|2nd|3rd|Summer)\s*sem(?:ester)?'
+    r'(?:\s+(?P<instructor>.+))?'
+    r'$',
+    re.IGNORECASE,
+)
+
+# Subject line WITH grades — fallback: plain alphabetic code with no course number
+# e.g. "STS", "Ethics", "Rizal", "OJT"
+_SUBJECT_WITH_GRADES_PLAIN = re.compile(
+    r'^'
+    r'(?P<code>[A-Z]{2,10})'
+    r'\s+'
+    r'(?P<title>.+?)'
+    r'\s+(?P<units>\(?\d+\)?)'
+    r'\s+(?P<mid>\d+\.\d+)'
+    r'\s+(?P<fin>\d+\.\d+)'
+    r'\s+(?:1st|2nd|3rd|Summer)\s*sem(?:ester)?'
+    r'(?:\s+(?P<instructor>.+))?'
+    r'$',
+    re.IGNORECASE,
+)
+
+
+def _match_subject_line(line: str):
+    """Try both subject-line patterns; return the first match or None."""
+    m = _SUBJECT_WITH_GRADES_NUMBERED.match(line)
+    if m:
+        return m
+    return _SUBJECT_WITH_GRADES_PLAIN.match(line)
+
+
+def _normalize_units(raw: str) -> int:
+    """Convert units string (e.g. '(3)' or '6') to integer."""
+    cleaned = re.sub(r'[^\d]', '', raw)
+    return int(cleaned) if cleaned else 3
+
+
+def _parse_semester_word(word: str) -> int:
+    """Convert 'First', '1st', 'Second', '2nd', 'Summer' etc. to integer."""
+    w = word.lower().strip()
+    return _SEM_MAP.get(w, 1)
+
+
+def preprocess_appraisal_text(raw: str) -> str:
+    """
+    The native PDF text for UNP appraisals has the ordinal suffix of the semester
+    on a separate line because it was typeset as a superscript.  Example:
+
+        ELEX 121 Electronics Theory ... 6 1.25 2.75 1\r\r\nst sem Rabanal
+
+    We join such split lines back into one before parsing.
+    """
+    # Normalize all CR/LF variants to plain newline
+    text = raw.replace('\r\r\n', '\n').replace('\r\n', '\n').replace('\r', '\n')
+
+    lines = text.splitlines()
+    merged: List[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        # Check if the *next* line starts with an ordinal suffix continuation like "st sem", "nd sem", "rd sem"
+        if i + 1 < len(lines):
+            nxt = lines[i + 1].strip()
+            if re.match(r'^(?:st|nd|rd)\s+sem', nxt, re.IGNORECASE):
+                line = line.rstrip() + nxt  # join without space gap; regex will handle
+                i += 2
+                merged.append(line)
+                continue
+        merged.append(line)
+        i += 1
+    return '\n'.join(merged)
+
+
+def extract_student_info_from_appraisal(text: str) -> dict:
+    """
+    Extract student information from the UNP Curriculum Appraisal native text.
+    The header block looks like:
+        Name: April Anne Cabanilla  Home Address: Rivadavia Narvacan Ilocos Sur
+        Major: Electronics Technology
+        BACHELOR OF SCIENCE IN INDUSTRIAL TECHNOLOGY
+    """
+    # Name field – may be followed by 'Home Address' on the same line
+    name_match = re.search(r'Name\s*:\s*([^\n]+)', text, re.IGNORECASE)
+    raw_name = ''
+    raw_address = ''
+    if name_match:
+        name_line = name_match.group(1).strip()
+        # Split off 'Home Address:' portion if on the same line
+        addr_split = re.split(r'Home\s+Address\s*:', name_line, flags=re.IGNORECASE)
+        raw_name = addr_split[0].strip()
+        if len(addr_split) > 1:
+            raw_address = addr_split[1].strip()
+
+    # Home Address on its own line if not found above
+    if not raw_address:
+        addr_match = re.search(r'Home\s+Address\s*:\s*([^\n]+)', text, re.IGNORECASE)
+        if addr_match:
+            raw_address = addr_match.group(1).strip()
+
+    # Major
+    major_match = re.search(r'Major\s*:\s*([^\n]+)', text, re.IGNORECASE)
+    raw_major = major_match.group(1).strip() if major_match else ''
+
+    # Course – look for "BACHELOR OF ..." or "BS ..." line
+    course_match = re.search(
+        r'(BACHELOR\s+OF\s+[A-Z ]+|BS[A-Z ]+|AB\s+[A-Z ]+)',
+        text, re.IGNORECASE
+    )
+    raw_course = course_match.group(1).strip() if course_match else raw_major
+
+    first_name, middle_name, last_name = parse_name_field(raw_name)
+    
+    # Extract student ID (format like 20-00000) if present in the text, else None
+    id_match = re.search(r'\b(\d{2}-\d{5})\b', text)
+    student_id = id_match.group(1) if id_match else "-"
+
+    return {
+        'student_id': student_id,
+        'first_name': first_name or 'Unknown',
+        'middle_name': middle_name,
+        'last_name': last_name or 'Student',
+        'address': raw_address or None,
+        'course': raw_course or raw_major or None,
+        'major': raw_major or None,
+        'status': 'Regular',
+    }
+
+
+def extract_subject_rows_from_appraisal(text: str) -> List[dict]:
+    """
+    Parse the subject table rows from a UNP Curriculum Appraisal document.
+
+    The document is divided into sections like:
+        First Year - First Semester
+        ...
+        Second Year - Second Semester
+        ...
+
+    Within each section, lines either have grades (midterm + final are present)
+    or are curriculum-only (no grades entered yet).
+
+    We return *only* the rows that actually have grade data so the import is
+    meaningful; curriculum rows without grades are skipped.
+    """
+    text = preprocess_appraisal_text(text)
+
+    # Skip header / table-header noise lines
+    _SKIP = re.compile(
+        r'^(Subject|Code|Descriptive\s+Title|Units|Rating|Semester|Instructor|'
+        r'Mid.?Term|Final|TOTAL|Adviser|Republic|University|Tamag|Ilocos|'
+        r'College|Bachelor|Ladder|\d{4})',
+        re.IGNORECASE,
+    )
+
+    rows: List[dict] = []
+    current_semester = 1  # default
+
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+
+        # Detect section header to track current semester
+        sec_match = _SECTION_HEADER.search(line)
+        if sec_match:
+            sem_word = sec_match.group(2)  # e.g. 'First', 'Second', 'Summer'
+            current_semester = _parse_semester_word(sem_word)
+            continue
+
+        if _SKIP.match(line):
+            continue
+
+        # Try to match a subject line WITH grades
+        m = _match_subject_line(line)
+        if m:
+            mid = parse_grade_token(m.group('mid'))
+            fin = parse_grade_token(m.group('fin'))
+            if mid is not None or fin is not None:
+                # Keep spaces in code for readability (e.g. 'ELEX 121', 'Ind Draw 101')
+                code = m.group('code').strip().upper()
+                rows.append({
+                    'subject_code': code,
+                    'subject_name': m.group('title').strip(),
+                    'units': _normalize_units(m.group('units')),
+                    'midterm_grade': mid,
+                    'final_grade': fin,
+                    'semester': current_semester,
+                    'school_year': '',
+                    'instructor': (m.group('instructor') or '').strip(),
+                })
+            continue
+
+        # Lines without grades are curriculum-only — skip them for import
+        # (they would show up as empty subjects in the database)
+
+    return rows
+
+
 def extract_student_info(text: str) -> dict:
+    """Legacy OCR-text compatible student info extractor."""
     student_name = find_field(text, 'Name')
     student_address = find_field(text, 'Home Address')
     student_major = find_field(text, 'Major') or find_field(text, 'Course')
 
     first_name, middle_name, last_name = parse_name_field(student_name or '')
-    student_id = normalize_student_id(first_name, last_name)
+    
+    # Extract student ID (format like 20-00000) if present in the text, else None
+    id_match = re.search(r'\b(\d{2}-\d{5})\b', text)
+    student_id = id_match.group(1) if id_match else "-"
 
     return {
         'student_id': student_id,
@@ -423,6 +783,7 @@ def parse_subject_line(line: str) -> Optional[dict]:
             'midterm_grade': midterm,
             'final_grade': final,
             'semester': parse_semester(parts[5]),
+            'school_year': '',
             'instructor': ' '.join(parts[6:]) if len(parts) > 6 else '',
         }
 
@@ -469,6 +830,7 @@ def parse_subject_line(line: str) -> Optional[dict]:
                 'midterm_grade': None,
                 'final_grade': final,
                 'semester': 1,
+                'school_year': '',
                 'instructor': '',
             }
         return None
@@ -500,6 +862,7 @@ def parse_subject_line(line: str) -> Optional[dict]:
         'midterm_grade': midterm,
         'final_grade': final,
         'semester': 1,
+        'school_year': '',
         'instructor': ' '.join(remaining[final_idx + 1:]),
     }
 
@@ -557,11 +920,24 @@ def create_or_find_student(db: Session, student_data: dict) -> Student:
       3. Create a brand-new student record if neither lookup succeeds.
     """
     raw_sid = (student_data.get('student_id') or '').strip()
+    if raw_sid == '-':
+        raw_sid = ''
+
+    # Sanitization: Ensure student status is 'Regular' or 'Irregular', never 'Active'.
+    # 'Active' is an enrollment state, so we default it to 'Regular' for the student category.
+    incoming_status = student_data.get('status')
+    if incoming_status == 'Active' or not incoming_status:
+        incoming_status = 'Regular'
 
     # 1. Look up by student_id first (unique column)
     if raw_sid:
         existing = db.query(Student).filter(Student.student_id == raw_sid).first()
         if existing:
+            # Sync status if it is currently 'Active' (legacy) or if provided by import
+            if existing.status == 'Active' or existing.status != incoming_status:
+                existing.status = incoming_status
+                db.commit()
+                db.refresh(existing)
             return existing
 
     # 2. Fall back to name-based lookup
@@ -571,11 +947,18 @@ def create_or_find_student(db: Session, student_data: dict) -> Student:
         student_data.get('last_name', ''),
     )
     if existing:
+        if existing.status == 'Active' or existing.status != incoming_status:
+            existing.status = incoming_status
+            db.commit()
+            db.refresh(existing)
         return existing
+
+    import uuid
+    generated_sid = raw_sid if raw_sid else f"TMP-{uuid.uuid4().hex[:8].upper()}"
 
     # 3. Build a proper StudentCreate schema so Pydantic validation passes
     schema = StudentCreate(
-        student_id=raw_sid or None,
+        student_id=generated_sid,
         first_name=student_data.get('first_name') or 'Unknown',
         middle_name=student_data.get('middle_name') or None,
         last_name=student_data.get('last_name') or 'Student',
@@ -587,7 +970,7 @@ def create_or_find_student(db: Session, student_data: dict) -> Student:
         year_level=student_data.get('year_level') or 1,
         course=student_data.get('course') or None,
         section=None,
-        status=student_data.get('status') or 'Regular',
+        status=incoming_status,
         major=student_data.get('major') or None,
     )
     return student_repo.create(db, schema)
@@ -607,6 +990,50 @@ def find_or_create_subject(db: Session, subject_code: str, subject_name: str, un
     return subject
 
 
+def sync_deficiency_from_grade(db: Session, student_id: str, subject_id: int, semester: int, remarks: str, school_year: str = None):
+    remarks_upper = (remarks or "").upper()
+    is_deficiency = False
+    def_type = "Other"
+
+    if "FAIL" in remarks_upper or remarks_upper == "5.0" or remarks_upper == "5":
+        is_deficiency = True
+        def_type = "Failed"
+    elif "INC" in remarks_upper:
+        is_deficiency = True
+        def_type = "Incomplete"
+    elif "UD" in remarks_upper or "UNOFFICIALLY" in remarks_upper:
+        is_deficiency = True
+        def_type = "Unofficially Dropped"
+    elif "DROP" in remarks_upper:
+        is_deficiency = True
+        def_type = "Dropped"
+
+    if is_deficiency:
+        existing = db.query(Deficiency).filter(
+            Deficiency.student_id == student_id,
+            Deficiency.subject_id == subject_id,
+        ).first()
+
+        if not existing:
+            new_defic = Deficiency(
+                student_id=student_id,
+                subject_id=subject_id,
+                type=def_type,
+                status="pending",
+                semester=str(semester),
+                school_year=school_year,
+                remarks=f"Auto-detected from grade remark: {remarks}",
+                date_recorded=str(date.today())
+            )
+            db.add(new_defic)
+            db.commit()
+        elif existing.status == "resolved":
+            existing.status = "pending"
+            existing.type = def_type
+            existing.remarks = f"Auto-detected from grade remark: {remarks}"
+            db.commit()
+
+
 def create_grade_record(db: Session, student_id: str, row: dict) -> Grade:
     subject = find_or_create_subject(
         db,
@@ -617,6 +1044,10 @@ def create_grade_record(db: Session, student_id: str, row: dict) -> Grade:
     final_value = compute_final(row.get('midterm_grade'), row.get('final_grade'))
     semester    = row.get('semester') or 1
     school_year = row.get('school_year')
+    
+    # Use explicit remark if provided (like "UD", "Dropped"), else compute from grade
+    explicit_remark = row.get('remark')
+    final_remark = explicit_remark if explicit_remark else remarks_for_grade(final_value)
 
     # Upsert: if a grade already exists for this student + subject + semester,
     # overwrite it with the fresh data instead of inserting a duplicate.
@@ -631,9 +1062,11 @@ def create_grade_record(db: Session, student_id: str, row: dict) -> Grade:
         existing.midterm    = row.get('midterm_grade')
         existing.finals     = row.get('final_grade')
         existing.grade      = final_value if final_value is not None else 0.0
-        existing.remarks    = remarks_for_grade(final_value)
+        existing.remarks    = final_remark
+        existing.instructor = row.get('instructor')
         db.commit()
         db.refresh(existing)
+        sync_deficiency_from_grade(db, student_id, subject.subject_id, semester, final_remark, school_year)
         return existing
 
     entry = Grade(
@@ -644,11 +1077,13 @@ def create_grade_record(db: Session, student_id: str, row: dict) -> Grade:
         midterm     = row.get('midterm_grade'),
         finals      = row.get('final_grade'),
         grade       = final_value if final_value is not None else 0.0,
-        remarks     = remarks_for_grade(final_value),
+        remarks     = final_remark,
+        instructor  = row.get('instructor'),
     )
     db.add(entry)
     db.commit()
     db.refresh(entry)
+    sync_deficiency_from_grade(db, student_id, subject.subject_id, semester, final_remark, school_year)
     return entry
 
 
@@ -684,27 +1119,64 @@ def import_appraisal(
     db: Session = Depends(get_db),
 ):
     try:
-        ensure_ocr_environment()
-    except RuntimeError as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
-
-    try:
-        data = file.file.read()
+        data_bytes = file.file.read()
     except Exception as exc:
         raise HTTPException(status_code=400, detail='Failed to read uploaded file') from exc
 
-    try:
-        extracted_text = ocr_pdf_bytes(data)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f'PDF OCR failed: {exc}') from exc
+    filename = (file.filename or '').lower()
+    is_image = filename.endswith(('.jpg', '.jpeg', '.png', '.bmp', '.tiff'))
+    is_pdf   = filename.endswith('.pdf') or (not is_image)
 
-    student_info = extract_student_info(extracted_text)
-    subject_rows = extract_subject_rows(extracted_text)
+    extracted_text = ''
+    used_native = False
+
+    if is_image:
+        # ── Image path: always OCR ──────────────────────────────────────────
+        try:
+            ensure_ocr_environment()
+        except RuntimeError as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+        try:
+            extracted_text = ocr_image_bytes(data_bytes)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f'Image OCR failed: {exc}') from exc
+    else:
+        # ── PDF path: native text first, OCR fallback ───────────────────────
+        if pdfium is None:
+            raise HTTPException(status_code=500, detail='Missing dependency: pypdfium2')
+        try:
+            native_text = extract_pdf_native_text(data_bytes)
+            if len(native_text.strip()) > 100:
+                extracted_text = native_text
+                used_native = True
+        except Exception:
+            pass
+
+        if not used_native:
+            try:
+                ensure_ocr_environment()
+            except RuntimeError as exc:
+                raise HTTPException(status_code=500, detail=str(exc))
+            try:
+                extracted_text = ocr_pdf_bytes(data_bytes)
+            except Exception as exc:
+                raise HTTPException(status_code=500, detail=f'PDF processing failed: {exc}') from exc
+
+    # --- Extract student info and subject rows ---
+    if used_native:
+        student_info = extract_student_info_from_appraisal(extracted_text)
+        subject_rows = extract_subject_rows_from_appraisal(extracted_text)
+    else:
+        student_info = extract_student_info(extracted_text)
+        subject_rows = extract_subject_rows(extracted_text)
 
     if not subject_rows:
         raise HTTPException(
             status_code=400,
-            detail='No subject rows could be extracted from the uploaded PDF.',
+            detail=(
+                'No graded subject rows could be extracted from the uploaded PDF. '
+                'Make sure the document contains subjects with Midterm and Final grade entries.'
+            ),
         )
 
     result = {
@@ -716,6 +1188,13 @@ def import_appraisal(
     }
 
     if commit:
+        # Appraisal subjects must have a school year provided manually.
+        # Since it's not in the PDF, automatic commit is not allowed.
+        # The user must use the preview -> edit -> commit flow.
+        raise HTTPException(
+            status_code=400,
+            detail="Automatic commit is not supported for Appraisals because School Year is required and must be added manually in the preview table."
+        )
         student = create_or_find_student(db, student_info)
         for row in subject_rows:
             create_grade_record(db, student.student_id, row)
@@ -731,18 +1210,46 @@ def import_grade_report(
     commit: bool = False,
     db: Session = Depends(get_db),
 ):
-    try:
-        ensure_ocr_environment()
-    except RuntimeError as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
-
     data_bytes = file.file.read()
-    filename = file.filename.lower()
+    filename = (file.filename or '').lower()
 
-    if filename.endswith('.pdf'):
-        extracted_text = ocr_pdf_bytes(data_bytes)
-    elif filename.endswith(('.jpg', '.jpeg', '.png', '.bmp', '.tiff')):
-        extracted_text = ocr_image_bytes(data_bytes)
+    is_image = filename.endswith(('.jpg', '.jpeg', '.png', '.bmp', '.tiff'))
+    is_pdf   = filename.endswith('.pdf') or (not is_image)
+
+    extracted_text = ''
+    used_native = False
+
+    if is_image:
+        # ── Image path: always OCR ──────────────────────────────────────────
+        try:
+            ensure_ocr_environment()
+        except RuntimeError as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+        try:
+            extracted_text = ocr_image_bytes(data_bytes)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f'Image OCR failed: {exc}') from exc
+    elif is_pdf:
+        # ── PDF path: native text first, OCR fallback ───────────────────────
+        if pdfium is None:
+            raise HTTPException(status_code=500, detail='Missing dependency: pypdfium2')
+        try:
+            native_text = extract_pdf_native_text(data_bytes)
+            if len(native_text.strip()) > 100:
+                extracted_text = native_text
+                used_native = True
+        except Exception:
+            pass
+
+        if not used_native:
+            try:
+                ensure_ocr_environment()
+            except RuntimeError as exc:
+                raise HTTPException(status_code=500, detail=str(exc))
+            try:
+                extracted_text = ocr_pdf_bytes(data_bytes)
+            except Exception as exc:
+                raise HTTPException(status_code=500, detail=f'PDF processing failed: {exc}') from exc
     else:
         raise HTTPException(status_code=400, detail='Unsupported file format. Use PDF or Image.')
 
@@ -776,13 +1283,15 @@ def import_grade_report(
             # Use the unified parser to separate names correctly
             fn, mn, ln = parse_name_field(s['student_name'])
             
+            norm_course, norm_major = normalize_course(s.get('course'))
             student_payload = {
                 'student_id': s['student_number'],
                 'first_name': fn,
                 'middle_name': mn,
                 'last_name': ln,
-                'course': s['course'],
-                'status': s['enrollment_status'],
+                'course': norm_course,
+                'major': norm_major,
+                'status': s.get('student_status', 'Regular'),
             }
             student_obj = create_or_find_student(db, student_payload)
 
@@ -801,13 +1310,43 @@ def import_grade_report(
 @router.post('/appraisal/commit')
 def commit_appraisal(data: AppraisalCommitIn, db: Session = Depends(get_db)):
     """Saves edited appraisal data (student info and subjects) to the database."""
+
+    s = data.student
+    # ── Field Validation ─────────────────────────────────────────────────────
+    missing_fields = []
+    if not s.get('first_name') or not s.get('last_name'): missing_fields.append("Student Name")
+    if not s.get('course'): missing_fields.append("Course")
+
+    if not data.rows:
+        missing_fields.append("Subject List (cannot be empty)")
+    else:
+        for i, row in enumerate(data.rows):
+            if not row.school_year or not str(row.school_year).strip():
+                missing_fields.append(f"Row {i+1} School Year")
+
+    if missing_fields:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Cannot save Appraisal. Please fill in all missing fields: {', '.join(missing_fields)}"
+        )
+
     student = create_or_find_student(db, data.student)
     count = 0
     for row in data.rows:
-        # Handle both Pydantic v1 and v2
         row_dict = row.dict() if hasattr(row, 'dict') else row.model_dump()
         create_grade_record(db, student.student_id, row_dict)
         count += 1
+        
+    log = ImportLog(
+        type='Appraisal',
+        filename=f"Appraisal - {student.last_name}",
+        imported_at=datetime.now().isoformat(),
+        records_created=count,
+        status='Success'
+    )
+    db.add(log)
+    db.commit()
+    
     return {
         "status": "success",
         "created_student": student_to_dict(student),
@@ -817,44 +1356,493 @@ def commit_appraisal(data: AppraisalCommitIn, db: Session = Depends(get_db)):
 @router.post('/grade-report/commit')
 def commit_grade_report(data: GradeReportCommitIn, db: Session = Depends(get_db)):
     """Saves edited grade report data to the database."""
+
+    # ── Field Validation ─────────────────────────────────────────────────────
+    # Ensure all required metadata and student information is present before saving.
+    missing_fields = []
+    m = data.metadata
+    if not m.subject_code or not m.subject_code.strip(): missing_fields.append("Subject Code")
+    if not m.instructor or not m.instructor.strip(): missing_fields.append("Instructor")
+    if not m.school_year or not m.school_year.strip(): missing_fields.append("School Year")
+    if m.semester is None: missing_fields.append("Semester")
+
+    if not data.rows:
+        missing_fields.append("Student Records (cannot be empty)")
+    else:
+        for i, row in enumerate(data.rows):
+            if not row.student_number or not row.student_number.strip():
+                missing_fields.append(f"Row {i+1} Student ID")
+            if not row.student_name or not row.student_name.strip():
+                missing_fields.append(f"Row {i+1} Student Name")
+
+    if missing_fields:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Cannot save Grade Report. Please fill in all missing fields: {', '.join(missing_fields)}"
+        )
+
     subject = find_or_create_subject(
         db,
-        data.metadata.subject_code or 'UNKNOWN',
-        data.metadata.subject_description,
+        m.subject_code or 'UNKNOWN',
+        m.subject_description,
         None,
     )
 
-    sem, sy = parse_academic_period(data.metadata.academic_period)
+    sem = m.semester or 1
+    sy = m.school_year
 
     count = 0
     for s in data.rows:
-        # Use provided separate fields if UI sends them, else fallback to splitting student_name
-        fn = s.first_name
-        mn = s.middle_name
-        ln = s.last_name
-        if not fn and not ln:
-            fn, mn, ln = parse_name_field(s.student_name)
+        # Always re-parse from student_name which is in 'LASTNAME, FIRSTNAME MIDDLENAME' format.
+        # This ensures consistent name storage regardless of any pre-split values sent by the frontend.
+        fn, mn, ln = parse_name_field(s.student_name)
             
+        norm_course, norm_major = normalize_course(s.course)
         student_payload = {
             'student_id': s.student_number,
             'first_name': fn,
             'middle_name': mn,
             'last_name': ln,
-            'course': s.course,
-            'status': s.enrollment_status,
+            'course': norm_course,
+            'major': norm_major,
+            'status': s.student_status,
         }
         student_obj = create_or_find_student(db, student_payload)
         grade_row = {
             'subject_code': subject.subject_code,
             'midterm_grade': s.midterm_grade,
             'final_grade': s.final_grade,
+            'remark': s.remark,
             'semester': sem,
-            'school_year': sy
+            'school_year': sy,
+            'instructor': data.metadata.instructor
         }
         create_grade_record(db, student_obj.student_id, grade_row)
         count += 1
+        
+    log = ImportLog(
+        type='Grade Report',
+        filename=f"Grade Report - {subject.subject_code}",
+        imported_at=datetime.now().isoformat(),
+        records_created=count,
+        status='Success'
+    )
+    db.add(log)
+    db.commit()
     
     return {
         "status": "success",
         "created_grades": count
+    }
+
+@router.get('/logs')
+def get_import_logs(db: Session = Depends(get_db)):
+    logs = db.query(ImportLog).order_by(ImportLog.imported_at.desc()).limit(50).all()
+    return logs
+
+@router.post('/promote-students')
+def promote_students(db: Session = Depends(get_db)):
+    """
+    Bulk promotes students to the next year level.
+    Students who reach the end of their course duration (1, 2, or 4 years)
+    are automatically marked as 'Graduated'.
+    """
+    # We only process students who haven't graduated yet
+    students = db.query(Student).filter(Student.status != 'Graduated').all()
+    promoted_count = 0
+    graduated_count = 0
+
+    for s in students:
+        course_name = (s.course or "").upper()
+        # Logic to determine course duration based on the canonical names
+        if "ONE-YEAR" in course_name:
+            max_years = 1
+        elif "TWO-YEAR" in course_name or "ASSOCIATE" in course_name or "AMAT" in course_name:
+            max_years = 2
+        else:
+            # Default to 4 years for Bachelor / BS programs
+            max_years = 4
+            
+        if s.year_level < max_years:
+            s.year_level += 1
+            promoted_count += 1
+        else:
+            s.status = 'Graduated'
+            graduated_count += 1
+            
+    db.commit()
+    return {
+        "status": "success",
+        "message": f"Promotion complete: {promoted_count} students promoted, {graduated_count} marked as graduated.",
+        "data": {
+            "promoted": promoted_count,
+            "graduated": graduated_count
+        }
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COR (Certificate of Registration) IMPORT
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _extract_text_from_file(file_bytes: bytes, filename: str) -> str:
+    """Extract text from PDF or image file."""
+    ext = filename.lower().rsplit('.', 1)[-1] if '.' in filename else ''
+    if ext == 'pdf':
+        try:
+            doc = pdfium.PdfDocument(file_bytes)
+            pages_text = []
+            for i in range(len(doc)):
+                page = doc[i]
+                tp = page.get_textpage()
+                text = tp.get_text_range()
+                if text.strip():
+                    pages_text.append(text)
+                else:
+                    # Fallback: render page to image for OCR
+                    if Image and pytesseract and is_tesseract_available():
+                        bitmap = page.render(scale=2.0)
+                        pil_img = bitmap.to_pil()
+                        text = pytesseract.image_to_string(pil_img)
+                        pages_text.append(text)
+            return '\n'.join(pages_text)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f'PDF extraction failed: {e}')
+    elif ext in ('jpg', 'jpeg', 'png', 'bmp', 'tiff', 'tif', 'webp'):
+        if not Image or not pytesseract or not is_tesseract_available():
+            raise HTTPException(status_code=400, detail='OCR not available')
+        img = Image.open(io.BytesIO(file_bytes))
+        return pytesseract.image_to_string(img)
+    else:
+        raise HTTPException(status_code=400, detail=f'Unsupported file type: {ext}')
+
+
+def _parse_cor_text(text: str) -> dict:
+    """Parse extracted COR text into structured data."""
+    lines = [line.strip() for line in text.replace('\r', '').split('\n') if line.strip()]
+    result = {
+        'student': {
+            'status': 'Regular'
+        },
+        'subjects': []
+    }
+
+    # ── Student header ──────────────────────────────────────────────────────
+    # Name: CABANILLA, APRIL ANNE Period: 2nd Term 2025-2026
+    # ID No: 23-00751 Course/Yr: BS COMSCI 3 Date: ...
+    for line in lines[:8]:
+        # Name
+        nm = re.search(r'Name[:\s]+([A-Za-z\s,.\-]+?)(?:\s{2,}|Period:|$)', line, re.IGNORECASE)
+        if nm and 'student_name' not in result['student']:
+            result['student']['student_name'] = nm.group(1).strip()
+
+        # Period / semester / school year
+        period_m = re.search(r'Period[:\s]+([1-9][a-z]*)\s*(?:Term|Semester|Sem)\s*([\d]{4}-[\d]{4})', line, re.IGNORECASE)
+        if period_m:
+            sem_word = period_m.group(1).lower()
+            sem_map = {'1st': 1, '1': 1, 'first': 1, '2nd': 2, '2': 2, 'second': 2, '3rd': 3, '3': 3, 'third': 3, 'summer': 3}
+            result['student']['semester'] = sem_map.get(sem_word, 1)
+            result['student']['school_year'] = period_m.group(2)
+
+        # ID No
+        id_m = re.search(r'ID\s*No[:\s]+([\d\-]+)', line, re.IGNORECASE)
+        if id_m:
+            result['student']['student_id'] = id_m.group(1).strip()
+
+        # Course/Yr — e.g. "BS COMSCI 3" or "BSIT 2"
+        course_m = re.search(r'Course[/\s]*Yr[:\s]+([A-Z\s0-9]+?)(?:\s{2,}|Date:|$)', line, re.IGNORECASE)
+        if course_m:
+            raw = course_m.group(1).strip()
+            yr_m = re.search(r'\s*(\d)$', raw)
+            extracted_course = raw
+            if yr_m:
+                result['student']['year_level'] = int(yr_m.group(1))
+                extracted_course = raw[:yr_m.start()].strip()
+            else:
+                extracted_course = raw
+            
+            # Auto-detect and normalize program names (e.g. ELECTRO -> Two-Year Technical Course)
+            norm_c, norm_m = normalize_course(extracted_course)
+            result['student']['course'] = norm_c
+            result['student']['major'] = norm_m
+
+    # ── Subject rows ─────────────────────────────────────────────────────────
+    # Pattern: starts with M<digits> or similar code, then subject code
+    # e.g.: M40 CSP110 Software Engineering 2 3.0 3.0 3.0 0.0 ... C. Reotutar
+    in_subjects = False
+    for line in lines:
+        # Detect header line
+        if re.search(r'Code\s+Subject Code\s+Subject Description', line, re.IGNORECASE):
+            in_subjects = True
+            continue
+        if in_subjects:
+            # Stop at totals
+            if re.search(r'^Total Units', line, re.IGNORECASE):
+                break
+            # Match subject row: optional leading code, subject code, description, numbers, instructor
+            # Try matching: <sched_code?> <SUBJ_CODE> <Description> <float> ... <Instructor>
+            m = re.match(
+                r'^(?:[A-Z]\d+\s+)?([A-Z]{2,}[A-Z0-9\-]+(?:\-[A-Z0-9]+)?)\s+'
+                r'(.+?)\s+'
+                r'(\d+\.\d+)\s+\d+\.\d+\s+\d+\.\d+\s+\d+\.\d+'
+                r'\s+(.+?)\s+([A-Z][a-zA-Z\.\s]+)$',
+                line
+            )
+            if not m:
+                # Simpler fallback: SUBJ_CODE description units instructor
+                m2 = re.match(
+                    r'^(?:[A-Z]\d+\s+)?([A-Z]{2,}[A-Z0-9\-]+(?:\-[A-Z0-9]+)?)\s+'
+                    r'(.+?)\s+(\d+\.\d+)(?:\s+.+?)?\s+([A-Z][a-zA-Z\.\s]+)$',
+                    line
+                )
+                if m2:
+                    result['subjects'].append({
+                        'subject_code': m2.group(1).strip(),
+                        'subject_name': m2.group(2).strip(),
+                        'units': float(m2.group(3)),
+                        'instructor': m2.group(4).strip(),
+                        'schedule': ''
+                    })
+                continue
+            # Full match
+            # Schedule + instructor are mixed; extract instructor as last token(s)
+            schedule_and_instr = m.group(4).strip() + ' ' + m.group(5).strip()
+            # Instructor is typically the last 1-3 words that look like a name
+            instr_m = re.search(r'([A-Z][a-zA-Z\.\s]{2,30})$', schedule_and_instr)
+            instructor = instr_m.group(1).strip() if instr_m else ''
+
+            result['subjects'].append({
+                'subject_code': m.group(1).strip(),
+                'subject_name': m.group(2).strip(),
+                'units': float(m.group(3)),
+                'instructor': instructor,
+                'schedule': ''
+            })
+
+    return result
+
+
+@router.post('/cor/preview')
+async def preview_cor(file: UploadFile = File(...)):
+    """Upload a COR file and return parsed preview data."""
+    content = await file.read()
+    text = _extract_text_from_file(content, file.filename)
+    parsed = _parse_cor_text(text)
+    if not parsed['student'].get('student_name') and not parsed['student'].get('student_id'):
+        raise HTTPException(status_code=422, detail='Could not extract student information from the document.')
+    
+    # Parse the student name into first, middle, last for the preview
+    raw_name = parsed['student'].get('student_name') or ''
+    if raw_name:
+        first, middle, last = parse_name_field(raw_name)
+        parsed['student']['first_name'] = first
+        parsed['student']['middle_name'] = middle or ''
+        parsed['student']['last_name'] = last
+        
+    return {
+        'filename': file.filename,
+        'student': parsed['student'],
+        'subjects': parsed['subjects'],
+        'raw_text': text[:800]  # for debug preview
+    }
+
+
+class CORSubjectRow(BaseModel):
+    subject_code: str
+    subject_name: Optional[str] = None
+    units: Optional[float] = None
+    instructor: Optional[str] = None
+    schedule: Optional[str] = None
+
+class CORStudentInfo(BaseModel):
+    student_id: Optional[str] = None
+    student_name: Optional[str] = None
+    first_name: Optional[str] = None
+    middle_name: Optional[str] = None
+    last_name: Optional[str] = None
+    course: Optional[str] = None
+    major: Optional[str] = None
+    year_level: Optional[int] = None
+    semester: Optional[int] = None
+    school_year: Optional[str] = None
+    status: Optional[str] = 'Regular'
+
+class CORCommitIn(BaseModel):
+    student: CORStudentInfo
+    subjects: List[CORSubjectRow]
+
+
+@router.post('/cor/commit')
+def commit_cor(data: CORCommitIn, db: Session = Depends(get_db)):
+    """Persist COR data: update/create student, upsert subjects, create enrollment records."""
+    s = data.student
+
+    # ── Field Validation ─────────────────────────────────────────────────────
+    # Ensure all required student and subject information is present before saving.
+    missing_fields = []
+    if not s.student_id or not s.student_id.strip(): missing_fields.append("Student ID")
+    if not s.student_name and not (s.first_name and s.last_name): missing_fields.append("Student Name")
+    if not s.course or not s.course.strip(): missing_fields.append("Course")
+    if s.year_level is None: missing_fields.append("Year Level")
+    if s.semester is None: missing_fields.append("Semester")
+    if not s.school_year or not s.school_year.strip(): missing_fields.append("School Year")
+    
+    if not data.subjects:
+        missing_fields.append("Subject List (cannot be empty)")
+    else:
+        for i, subj in enumerate(data.subjects):
+            if not subj.subject_code or not subj.subject_code.strip(): 
+                missing_fields.append(f"Row {i+1} Subject Code")
+            if not subj.subject_name or not subj.subject_name.strip(): 
+                missing_fields.append(f"Row {i+1} Subject Title")
+            if subj.units is None: 
+                missing_fields.append(f"Row {i+1} Units")
+            if not subj.instructor or not subj.instructor.strip():
+                missing_fields.append(f"Row {i+1} Instructor")
+
+    if missing_fields:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Cannot save COR. Please fill in all missing fields: {', '.join(missing_fields)}"
+        )
+
+    semester = s.semester or 1
+    school_year = s.school_year
+    today = date.today().isoformat()
+    
+    # Normalize the course and major again in case of manual edits in the frontend
+    norm_course, norm_major = normalize_course(s.course)
+    # Favor a derived major from the course string, fallback to an explicitly provided major
+    final_major = norm_major or s.major
+
+    # ── Resolve student ──────────────────────────────────────────────────────
+    student_obj = None
+    if s.student_id:
+        student_obj = db.query(Student).filter(Student.student_id == s.student_id).first()
+
+    if not student_obj and s.student_name:
+        # Try matching by name
+        parts = s.student_name.replace(',', ' ').split()
+        if parts:
+            student_obj = db.query(Student).filter(
+                Student.last_name.ilike(f'%{parts[0]}%')
+            ).first()
+
+    if not student_obj:
+        if s.first_name or s.last_name:
+            first = s.first_name or ''
+            middle = s.middle_name or None
+            last = s.last_name or ''
+        else:
+            # Parse name using the unified parse_name_field function
+            first, middle, last = parse_name_field(s.student_name or '')
+
+        from ..schemas.student_schema import StudentCreate as SC
+        schema = SC(
+            first_name=first or 'Unknown',
+            last_name=last or 'Unknown',
+            middle_name=middle,
+            student_id=s.student_id,
+            course=norm_course,
+            major=final_major,
+            year_level=s.year_level,
+            status=s.status or 'Regular'
+        )
+        student_obj = student_repo.create(db, schema)
+    else:
+        # Handle student_id change with manual record synchronization.
+        # This is required for SQLite databases where ON UPDATE CASCADE isn't in the schema.
+        new_sid = s.student_id.strip() if (s.student_id and s.student_id.strip()) else None
+        old_sid = student_obj.student_id
+
+        if new_sid and old_sid != new_sid:
+            # Temporarily disable foreign keys to allow the multi-table ID swap
+            db.commit() # End any active transaction first
+            db.execute(text("PRAGMA foreign_keys = OFF"))
+            try:
+                target_old = (old_sid or "").strip()
+                for model in [Grade, Deficiency, Enrollment]:
+                    db.query(model).filter(
+                        or_(model.student_id == old_sid, text("trim(student_id) = :oid"))
+                    ).params(oid=target_old).update({model.student_id: new_sid}, synchronize_session=False)
+                
+                student_obj.student_id = new_sid
+                if norm_course: student_obj.course = norm_course
+                if final_major: student_obj.major = final_major
+                if s.year_level: student_obj.year_level = s.year_level
+                if s.status: student_obj.status = s.status
+                db.commit()
+            finally:
+                db.execute(text("PRAGMA foreign_keys = ON"))
+        else:
+            if norm_course: student_obj.course = norm_course
+            if final_major: student_obj.major = final_major
+            if s.year_level: student_obj.year_level = s.year_level
+            if s.status: student_obj.status = s.status
+            db.commit()
+
+        db.refresh(student_obj)
+
+    # Prefer the real student_id; fall back to the auto-increment PK only as last resort
+    student_id = student_obj.student_id or str(student_obj.student_number)
+
+    # ── Upsert subjects and create enrollments ───────────────────────────────
+    count = 0
+    for row in data.subjects:
+        code = row.subject_code.strip().upper()
+        subject = db.query(Subject).filter(Subject.subject_code == code).first()
+        if not subject:
+            subject = Subject(
+                subject_code=code,
+                subject_name=row.subject_name or code,
+                unit=int(row.units) if row.units else 3
+            )
+            db.add(subject)
+            db.commit()
+            db.refresh(subject)
+
+        # Check for existing enrollment
+        existing_enroll = db.query(Enrollment).filter(
+            Enrollment.student_id == student_id,
+            Enrollment.subject_id == subject.subject_id,
+            Enrollment.school_year == school_year,
+            Enrollment.semester == semester
+        ).first()
+
+        if not existing_enroll:
+            enroll = Enrollment(
+                student_id=student_id,
+                subject_id=subject.subject_id,
+                semester=semester,
+                school_year=school_year,
+                instructor=row.instructor,
+                schedule=row.schedule,
+                units=row.units,
+                date_enrolled=today
+            )
+            db.add(enroll)
+            db.commit()
+            count += 1
+        else:
+            # Update instructor if provided
+            if row.instructor:
+                existing_enroll.instructor = row.instructor
+            db.commit()
+
+    log = ImportLog(
+        type='COR',
+        filename=f"COR - {s.student_name or s.student_id}",
+        imported_at=datetime.now().isoformat(),
+        records_created=count,
+        status='Success'
+    )
+    db.add(log)
+    db.commit()
+
+    return {
+        'status': 'success',
+        'student_id': student_id,
+        'student_name': f'{student_obj.first_name} {student_obj.last_name}',
+        'enrollments_created': count,
+        'student': student_to_dict(student_obj)
     }

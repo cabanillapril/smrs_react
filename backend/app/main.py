@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from .database.db import init_db
-from .routes import student_routes, grade_routes, deficiency_routes, curriculum_routes, subject_routes, dashboard_routes, auth_routes, import_routes
+from .routes import student_routes, grade_routes, deficiency_routes, curriculum_routes, subject_routes, dashboard_routes, auth_routes, import_routes, enrollment_routes, report_routes
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -36,7 +36,9 @@ app.include_router(deficiency_routes.router, prefix="/deficiencies", tags=["Defi
 app.include_router(curriculum_routes.router, prefix="/curriculum", tags=["Curriculum"])
 app.include_router(subject_routes.router, prefix="/subjects", tags=["Subjects"])
 app.include_router(import_routes.router, prefix="/import", tags=["Import"])
+app.include_router(report_routes.router, prefix="/reports", tags=["Reports"])
 app.include_router(dashboard_routes.router, prefix="/dashboard", tags=["Dashboard"])
+app.include_router(enrollment_routes.router, prefix="/enrollments", tags=["Enrollments"])
 
 @app.get("/")
 def root():

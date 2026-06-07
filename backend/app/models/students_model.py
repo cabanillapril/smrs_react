@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String
+from sqlalchemy.orm import relationship
 from ..database.db import Base
 
 class Student(Base):
@@ -19,3 +20,22 @@ class Student(Base):
     section        = Column(String, nullable=True)
     status         = Column(String, default="Regular")
     major          = Column(String, nullable=True)
+
+    # Cascading Relationships
+    # These ensure that when a Student is deleted, all related child records are also deleted.
+    # Note: This assumes child models (Grade, Deficiency, Enrollment) have a 'student' relationship.
+    grades = relationship(
+        "Grade", 
+        back_populates="student", 
+        cascade="all, delete-orphan"
+    )
+    deficiencies = relationship(
+        "Deficiency", 
+        back_populates="student", 
+        cascade="all, delete-orphan"
+    )
+    enrollments = relationship(
+        "Enrollment", 
+        back_populates="student", 
+        cascade="all, delete-orphan"
+    )

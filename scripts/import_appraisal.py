@@ -78,7 +78,7 @@ class SubjectRow:
 
 @dataclass
 class StudentInfo:
-    student_id: str
+    student_id: Optional[str]
     first_name: str
     middle_name: Optional[str]
     last_name: str
@@ -175,7 +175,8 @@ def extract_student_info(text: str) -> StudentInfo:
     if not major:
         major = find_field(text, 'Course')
     first_name, middle_name, last_name = parse_name_field(name_text)
-    student_id = normalize_text(f'{last_name}{first_name}') or 'UNKNOWN'
+    id_match = re.search(r'\b(\d{2}-\d{5})\b', text)
+    student_id = id_match.group(1) if id_match else None
     return StudentInfo(
         student_id=student_id,
         first_name=first_name or 'Unknown',
@@ -392,7 +393,7 @@ def get_backend_students(base_url: str) -> List[dict]:
 
 def find_student(existing: List[dict], student: StudentInfo) -> Optional[dict]:
     for candidate in existing:
-        if candidate.get('student_id') == student.student_id:
+        if student.student_id and candidate.get('student_id') == student.student_id:
             return candidate
         if candidate.get('first_name', '').lower() == student.first_name.lower() and candidate.get('last_name', '').lower() == student.last_name.lower():
             return candidate

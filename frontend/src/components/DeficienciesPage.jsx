@@ -17,8 +17,13 @@ export default function DeficienciesPage({ onAdd, onViewStudent }) {
   const [major, setMajor] = useState('')
   const [year, setYear] = useState('')
   const [section, setSection] = useState('')
+  const [semester, setSemester] = useState('')
+  const [schoolYear, setSchoolYear] = useState('')
+  const [sortBy, setSortBy] = useState('default')
 
-  const filtered = deficiencies.filter((d) => {
+  const availableSchoolYears = [...new Set(deficiencies.map(d => d.school_year).filter(Boolean))].sort((a, b) => b.localeCompare(a))
+
+  let filtered = deficiencies.filter((d) => {
     const student = students.find(s => s.student_id === d.student_id)
     const studentName = student ? (student.first_name + ' ' + student.last_name).toLowerCase() : ''
 
@@ -31,9 +36,27 @@ export default function DeficienciesPage({ onAdd, onViewStudent }) {
     const matchesMajor = !major || student?.major === major
     const matchesYear = !year || student?.year_level === parseInt(year)
     const matchesSection = !section || student?.section === section
+    const matchesSemester = !semester || String(d.semester) === String(semester)
+    const matchesSchoolYear = !schoolYear || d.school_year === schoolYear
 
-    return matchesSearch && matchesCourse && matchesMajor && matchesYear && matchesSection
+    return matchesSearch && matchesCourse && matchesMajor && matchesYear && matchesSection && matchesSemester && matchesSchoolYear
   })
+
+  if (sortBy === 'alpha') {
+    filtered.sort((a, b) => {
+      const sA = students.find(s => s.student_id === a.student_id)
+      const sB = students.find(s => s.student_id === b.student_id)
+      const nameA = sA ? `${sA.last_name}, ${sA.first_name}`.toLowerCase() : 'zzzz'
+      const nameB = sB ? `${sB.last_name}, ${sB.first_name}`.toLowerCase() : 'zzzz'
+      return nameA.localeCompare(nameB)
+    })
+  } else if (sortBy === 'date') {
+    filtered.sort((a, b) => {
+      const dateA = new Date(a.date_recorded || 0)
+      const dateB = new Date(b.date_recorded || 0)
+      return dateB - dateA
+    })
+  }
 
   async function handleResolve(id) {
     if (!confirm('Mark this deficiency as resolved?')) return
@@ -104,8 +127,29 @@ export default function DeficienciesPage({ onAdd, onViewStudent }) {
           {SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
 
+        <select className="filter-select" value={semester} onChange={(e) => setSemester(e.target.value)}>
+          <option value="">All Semesters</option>
+          <option value="1">1st Semester</option>
+          <option value="2">2nd Semester</option>
+          <option value="3">Summer</option>
+        </select>
+
+        <select className="filter-select" value={schoolYear} onChange={(e) => setSchoolYear(e.target.value)}>
+          <option value="">All School Years</option>
+          {availableSchoolYears.map(sy => <option key={sy} value={sy}>{sy}</option>)}
+        </select>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto', marginRight: '16px' }}>
+          <i className="ph ph-sort-ascending" style={{ color: 'var(--text-muted)' }} />
+          <select className="filter-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ padding: '6px 12px' }}>
+            <option value="default">Sort by...</option>
+            <option value="alpha">Alphabetical (A-Z)</option>
+            <option value="date">Date Recorded (Newest)</option>
+          </select>
+        </div>
+
         <button className="btn btn-ghost" onClick={() => {
-          setSearch(''); setCourse(''); setMajor(''); setYear(''); setSection('');
+          setSearch(''); setCourse(''); setMajor(''); setYear(''); setSection(''); setSemester(''); setSchoolYear(''); setSortBy('default');
         }}>Reset</button>
       </div>
 
@@ -130,7 +174,8 @@ export default function DeficienciesPage({ onAdd, onViewStudent }) {
           <tbody>
             {filtered.map((d, index) => {
               const s = students.find(st => st.student_id === d.student_id)
-              const studentId = s ? (s.student_id || s.student_id) : d.student_id
+              const getDisplayId = (id) => id && !id.startsWith('TMP-') ? id : '-'
+              const studentId = s ? getDisplayId(s.student_id) : getDisplayId(d.student_id)
               const studentName = s ? `${s.last_name}, ${s.first_name}` : 'Unknown Student'
 
               return (

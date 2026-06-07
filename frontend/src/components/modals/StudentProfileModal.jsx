@@ -1,13 +1,20 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import Modal from '../Modal'
 import { StatusBadge } from '../Badges'
-import { deficiencyService, gradeService, studentService } from '../../services/api'
+import { deficiencyService, gradeService, studentService, enrollmentService } from '../../services/api'
+import AddEnrollmentModal from './AddEnrollmentModal'
+import EditEnrollmentModal from './EditEnrollmentModal'
 
 export default function StudentProfileModal({ isOpen, onClose, student, onEdit, onDeleted, onAddGrade, onAddDeficiency, onEditGrade }) {
   const [deficiencies, setDeficiencies] = useState([])
   const [grades, setGrades] = useState([])
+  const [enrollments, setEnrollments] = useState([])
+  const [gwaData, setGwaData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('profile')
+  const [isAddEnrollOpen, setIsAddEnrollOpen] = useState(false)
+  const [isEditEnrollOpen, setIsEditEnrollOpen] = useState(false)
+  const [selectedEnrollment, setSelectedEnrollment] = useState(null)
 
 
   useEffect(() => {
@@ -23,13 +30,17 @@ export default function StudentProfileModal({ isOpen, onClose, student, onEdit, 
     setLoading(true)
     try {
       const studentKey = student.student_id || student.student_number
-      const [d, g] = await Promise.all([
+      const [d, g, gwa, e] = await Promise.all([
         deficiencyService.getByStudent(studentKey),
         gradeService.getByStudent(studentKey),
+        studentService.getGwa(studentKey),
+        enrollmentService.getByStudent(studentKey)
       ])
 
       setDeficiencies(d)
       setGrades(g)
+      setGwaData(gwa)
+      setEnrollments(e || [])
     } catch (err) {
       console.error('StudentProfileModal loadData error', err)
     } finally {
@@ -77,10 +88,21 @@ export default function StudentProfileModal({ isOpen, onClose, student, onEdit, 
     }
   }
 
+  async function handleDeleteEnrollment(enrollmentId) {
+    if (!confirm('Are you sure you want to delete this enrolled subject?')) return
+    try {
+      await enrollmentService.delete(enrollmentId)
+      await loadData()
+    } catch (err) {
+      alert(err.message)
+    }
+  }
+
   if (!student) return null
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Student Profile" size="large">
+    <>
+      <Modal isOpen={isOpen} onClose={onClose} title="Student Profile" size="large">
       <div
         className="modal-tabs"
         style={{ display: 'flex', gap: '8px', padding: '0 24px', borderBottom: '1px solid var(--border)' }}
@@ -99,6 +121,22 @@ export default function StudentProfileModal({ isOpen, onClose, student, onEdit, 
           }}
         >
           Profile Info
+        </button>
+
+        <button
+          className={`modal-tab ${activeTab === 'subjects' ? 'active' : ''}`}
+          onClick={() => setActiveTab('subjects')}
+          style={{
+            padding: '12px 16px',
+            background: 'none',
+            border: 'none',
+            borderBottom: activeTab === 'subjects' ? '2px solid var(--accent-blue)' : '2px solid transparent',
+            color: activeTab === 'subjects' ? 'var(--accent-blue)' : 'var(--text-muted)',
+            fontWeight: activeTab === 'subjects' ? '600' : '500',
+            cursor: 'pointer',
+          }}
+        >
+          Subjects
         </button>
 
         <button
@@ -153,12 +191,27 @@ export default function StudentProfileModal({ isOpen, onClose, student, onEdit, 
                   <h2 style={{ marginBottom: 8 }}>
                     {student.first_name} {student.middle_name ? student.middle_name[0] + '.' : ''} {student.last_name}
                   </h2>
-                  <div className="profile-subinfo" style={{ marginBottom: '12px' }}>
+                  <div className="profile-subinfo" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
                     <span className="id-cell" style={{ color: 'var(--accent-blue)', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
-                      {student.student_id || student.student_number}
+                      {student.student_id && !student.student_id.startsWith('TMP-') ? student.student_id : "-"}
                     </span>
-                    <span className="dot">•</span>
+                    <span className="dot" style={{ color: 'var(--text-muted)' }}>•</span>
                     <StatusBadge status={student.status} />
+                    {gwaData && gwaData.gwa != null && (
+                      <>
+                        <span className="dot" style={{ color: 'var(--text-muted)' }}>•</span>
+                        <div style={{
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                          fontSize: '0.75rem',
+                          fontWeight: '600',
+                          backgroundColor: gwaData.gwa <= 2.0 ? 'rgba(52, 211, 153, 0.15)' : gwaData.gwa <= 3.0 ? 'rgba(251, 191, 36, 0.15)' : 'rgba(248, 113, 113, 0.15)',
+                          color: gwaData.gwa <= 2.0 ? 'var(--accent-green)' : gwaData.gwa <= 3.0 ? 'var(--accent-orange)' : 'var(--accent-red)'
+                        }}>
+                          GWA: {gwaData.gwa.toFixed(2)}
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -261,6 +314,7 @@ export default function StudentProfileModal({ isOpen, onClose, student, onEdit, 
                   <thead>
                     <tr>
                       <th>Subject</th>
+                      <th>Instructor</th>
                       <th>Midterm</th>
                       <th>Finals</th>
                       <th>Final Grade</th>
@@ -269,62 +323,89 @@ export default function StudentProfileModal({ isOpen, onClose, student, onEdit, 
                     </tr>
                   </thead>
                   <tbody>
-                    {grades.map((g) => (
-                      <tr key={g.grade_id}>
-                        <td>{g.subject_code}</td>
-                        <td>{g.midterm || '—'}</td>
-                        <td>{g.finals || '—'}</td>
-                        <td>
-                          <b>{g.grade || '—'}</b>
-                        </td>
-                        <td>
-                          <span className={`badge ${g.remarks === 'Passed' ? 'passed' : 'failed'}`}>{g.remarks}</span>
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                            <button
-                              className="action-btn edit"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                onEditGrade?.(g)
-                              }}
-                              title="Edit"
-                              style={{
-                                backgroundColor: 'transparent',
-                                color: 'var(--accent-green)',
-                                border: 'none',
-                              }}
-                            >
-                              <i className="ph ph-pencil-simple" />
-                            </button>
+                    {(() => {
+                      // Group grades by School Year and Semester
+                      const grouped = grades.reduce((acc, g) => {
+                        const sy = g.school_year || 'Unknown Year'
+                        const sem = g.semester ? `Semester ${g.semester}` : 'Unknown Semester'
+                        const key = `${sy} - ${sem}`
+                        if (!acc[key]) acc[key] = []
+                        acc[key].push(g)
+                        return acc
+                      }, {})
 
-                            <button
-                              className="action-btn delete"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleDeleteGrade(g.grade_id)
-                              }}
-                              title="Delete"
-                              style={{
-                                backgroundColor: 'transparent',
-                                color: 'var(--accent-red)',
-                                border: 'none',
-                              }}
-                            >
-                              <i className="ph ph-trash" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                      if (Object.keys(grouped).length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan="6" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                              No grades recorded.
+                            </td>
+                          </tr>
+                        )
+                      }
 
-                    {grades.length === 0 && (
-                      <tr>
-                        <td colSpan="6" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
-                          No grades recorded.
-                        </td>
-                      </tr>
-                    )}
+                      // Sort keys (descending generally makes sense for transcripts)
+                      const sortedKeys = Object.keys(grouped).sort((a, b) => b.localeCompare(a))
+
+                      return sortedKeys.map(key => (
+                        <React.Fragment key={key}>
+                          <tr style={{ backgroundColor: 'var(--bg-card)' }}>
+                            <td colSpan="6" style={{ fontWeight: '600', color: 'var(--text-normal)', padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+                              {key}
+                            </td>
+                          </tr>
+                          {grouped[key].map(g => (
+                            <tr key={g.grade_id}>
+                              <td>{g.subject_code}</td>
+                              <td><div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>{g.instructor || '—'}</div></td>
+                              <td>{g.midterm || '—'}</td>
+                              <td>{g.finals || '—'}</td>
+                              <td>
+                                <b>{g.grade || '—'}</b>
+                              </td>
+                              <td>
+                                <span className={`badge ${g.remarks === 'Passed' ? 'passed' : 'failed'}`}>{g.remarks}</span>
+                              </td>
+                              <td>
+                                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                                  <button
+                                    className="action-btn edit"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      onEditGrade?.(g)
+                                    }}
+                                    title="Edit"
+                                    style={{
+                                      backgroundColor: 'transparent',
+                                      color: 'var(--accent-green)',
+                                      border: 'none',
+                                    }}
+                                  >
+                                    <i className="ph ph-pencil-simple" />
+                                  </button>
+
+                                  <button
+                                    className="action-btn delete"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleDeleteGrade(g.grade_id)
+                                    }}
+                                    title="Delete"
+                                    style={{
+                                      backgroundColor: 'transparent',
+                                      color: 'var(--accent-red)',
+                                      border: 'none',
+                                    }}
+                                  >
+                                    <i className="ph ph-trash" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </React.Fragment>
+                      ))
+                    })()}
                   </tbody>
                 </table>
               </div>
@@ -436,9 +517,116 @@ export default function StudentProfileModal({ isOpen, onClose, student, onEdit, 
               </div>
             </div>
           )}
+
+          {activeTab === 'subjects' && (
+            <div className="profile-section">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3 className="section-title" style={{ margin: 0 }}>
+                  Enrolled Subjects
+                </h3>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => setIsAddEnrollOpen(true)}
+                >
+                  + Add Subject
+                </button>
+              </div>
+
+              <div className="table-card min">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Subject Code</th>
+                      <th>Subject Name</th>
+                      <th>Instructor</th>
+                      <th>Units</th>
+                      <th>Semester</th>
+                      <th>School Year</th>
+                      <th>Schedule</th>
+                      <th style={{ width: '110px' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {enrollments.length === 0 ? (
+                      <tr>
+                        <td colSpan="8" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                          No enrolled subjects found.
+                        </td>
+                      </tr>
+                    ) : (
+                      enrollments.map((e) => (
+                        <tr key={e.enrollment_id}>
+                          <td><b>{e.subject_code}</b></td>
+                          <td>{e.subject_name || '—'}</td>
+                          <td>{e.instructor || '—'}</td>
+                          <td>{e.units ?? '—'}</td>
+                          <td>
+                            {e.semester === 1 && '1st Semester'}
+                            {e.semester === 2 && '2nd Semester'}
+                            {e.semester === 3 && 'Summer'}
+                          </td>
+                          <td>{e.school_year || '—'}</td>
+                          <td>{e.schedule || '—'}</td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                              <button
+                                className="action-btn edit"
+                                onClick={() => {
+                                  setSelectedEnrollment(e)
+                                  setIsEditEnrollOpen(true)
+                                }}
+                                title="Edit"
+                                style={{
+                                  backgroundColor: 'transparent',
+                                  color: 'var(--accent-green)',
+                                  border: 'none',
+                                }}
+                              >
+                                <i className="ph ph-pencil-simple" />
+                              </button>
+                              <button
+                                className="action-btn delete"
+                                onClick={() => handleDeleteEnrollment(e.enrollment_id)}
+                                title="Delete"
+                                style={{
+                                  backgroundColor: 'transparent',
+                                  color: 'var(--accent-red)',
+                                  border: 'none',
+                                }}
+                              >
+                                <i className="ph ph-trash" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </Modal>
+
+    <AddEnrollmentModal
+      isOpen={isAddEnrollOpen}
+      onClose={() => setIsAddEnrollOpen(false)}
+      onSaved={loadData}
+      studentId={student.student_id || student.student_number}
+    />
+
+    <EditEnrollmentModal
+      isOpen={isEditEnrollOpen}
+      onClose={() => {
+        setIsEditEnrollOpen(false)
+        setSelectedEnrollment(null)
+      }}
+      onSaved={loadData}
+      enrollment={selectedEnrollment}
+    />
+    </>
   )
 }
 
