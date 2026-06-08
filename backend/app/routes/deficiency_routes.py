@@ -15,6 +15,7 @@ router = APIRouter()
 class DeficiencyIn(BaseModel):
     student_id: str
     subject_code: str
+    subject_name: Optional[str] = None
     type: str
     status: Optional[str] = "pending"
     semester: Optional[str] = None
@@ -55,12 +56,15 @@ def create_deficiency(data: DeficiencyIn, db: Session = Depends(get_db)):
     if not subject:
         subject = Subject(
             subject_code=code,
-            subject_name=code,
+            subject_name=data.subject_name.strip() if data.subject_name else code,
             unit=3,
         )
         db.add(subject)
-        db.commit()
-        db.refresh(subject)
+    elif data.subject_name and data.subject_name.strip():
+        subject.subject_name = data.subject_name.strip()
+
+    db.commit()
+    db.refresh(subject)
 
     entry = Deficiency(
         student_id=data.student_id,

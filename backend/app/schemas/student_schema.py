@@ -16,6 +16,7 @@ class StudentCreate(BaseModel):
     section:        Optional[str] = None
     status:         Optional[str] = "Regular"
     major:          Optional[str] = None
+    adviser:        Optional[str] = None
 
 class StudentUpdate(BaseModel):
     student_id:     Optional[str] = None
@@ -32,6 +33,7 @@ class StudentUpdate(BaseModel):
     section:        Optional[str] = None
     status:         Optional[str] = None
     major:          Optional[str] = None
+    adviser:        Optional[str] = None
 
 class StudentOut(BaseModel):
     student_number: int
@@ -49,5 +51,6 @@ class StudentOut(BaseModel):
     section:        Optional[str]
     status:         Optional[str]
     major:          Optional[str]
+    adviser:        Optional[str]
 
     model_config = {"from_attributes": True}

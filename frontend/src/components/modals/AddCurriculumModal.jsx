@@ -39,7 +39,7 @@ export default function AddCurriculumModal({ isOpen, onClose, onSaved, initialCo
         year_level: parseInt(form.year_level),
         semester: parseInt(form.semester),
         subject_code: form.subject_code.trim().toUpperCase(),
-        subject_name: form.subject_name.trim() || form.subject_code.trim().toUpperCase(),
+        subject_name: form.subject_name.trim() || null,
         units: parseInt(form.units) || 3,
       })
       setForm({ major: '', year_level: '1', semester: '1', subject_code: '', subject_name: '', units: '3' })

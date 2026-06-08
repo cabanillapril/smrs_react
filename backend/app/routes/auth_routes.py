@@ -14,7 +14,7 @@ class LoginResponse(BaseModel):
 
 @router.post("/login", response_model=LoginResponse)
 def login(data: LoginRequest):
-    # Simple hardcoded credentials for demonstration
+    # Simple hardcoded credentials 
     if data.username == "admin" and data.password == "admin123":
         return {
             "access_token": "mock-token-123",

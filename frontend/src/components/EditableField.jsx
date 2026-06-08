@@ -10,8 +10,10 @@ export default function EditableField({
     onSave,
     label,
     className = "",
+    placeholder = "",
     type = "text",
-    options = []
+    options = [],
+    style = {}
 }) {
     const [isEditing, setIsEditing] = useState(false);
     const [currentValue, setCurrentValue] = useState(value);
@@ -48,7 +50,7 @@ export default function EditableField({
     };
 
     return (
-        <div className={`editable-field-group ${className}`} style={{ marginBottom: '12px' }}>
+        <div className={`editable-field-group ${className}`} style={{ marginBottom: '12px', ...style }}>
             {label && (
                 <div style={{
                     fontSize: '0.65rem',
@@ -67,6 +69,7 @@ export default function EditableField({
                     <select
                         autoFocus
                         value={currentValue || ''}
+                        placeholder={placeholder}
                         onChange={(e) => setCurrentValue(e.target.value)}
                         onBlur={handleSave}
                         style={{
@@ -127,7 +130,7 @@ export default function EditableField({
                     onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'}
                     onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                 >
-                    {value || <span style={{ opacity: 0.4 }}>—</span>}
+                    {value || <span style={{ opacity: 0.4 }}>{placeholder || '—'}</span>}
                 </div>
             )}
         </div>

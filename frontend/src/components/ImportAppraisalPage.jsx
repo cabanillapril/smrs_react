@@ -71,16 +71,17 @@ export default function ImportAppraisalPage({ onActivity, onOpenStudentEdit }) {
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
 
-    function handleAddRow() {
+    function handleAddRow(year = 1, sem = 1) {
         setPreview(prev => {
             if (!prev) return null
             const newRow = {
-                subject_code: 'SUBJ101',
-                subject_name: 'New Subject Name',
+                subject_code: '',
+                subject_name: '',
                 units: 3,
                 midterm_grade: null,
                 final_grade: null,
-                semester: 1,
+                semester: sem,
+                year_level: year,
                 school_year: prev.student.school_year || '',
                 instructor: ''
             }
@@ -162,6 +163,29 @@ export default function ImportAppraisalPage({ onActivity, onOpenStudentEdit }) {
         setResult(null)
     }
 
+    // Helper to group rows for display
+    const getGroupedRows = () => {
+        if (!preview?.rows) return {};
+        return preview.rows.reduce((acc, row, originalIndex) => {
+            const key = `${row.year_level || 1}-${row.semester || 1}`;
+            if (!acc[key]) acc[key] = [];
+            acc[key].push({ ...row, originalIndex });
+            return acc;
+        }, {});
+    };
+
+    const getSectionTitle = (key) => {
+        const [year, sem] = key.split('-');
+        const yearLabels = ['', 'First Year', 'Second Year', 'Third Year', 'Fourth Year', 'Fifth Year'];
+        const semLabels = ['', 'First Semester', 'Second Semester', 'Summer'];
+
+        const yLabel = yearLabels[parseInt(year)] || `Year ${year}`;
+        let sLabel = semLabels[parseInt(sem)] || `Semester ${sem}`;
+        if (parseInt(sem) === 3) sLabel = "Summer";
+
+        return `${yLabel} - ${sLabel}`;
+    };
+
     function validateAppraisalForm() {
         const missing = [];
         if (!preview) return ["No data to save."];
@@ -178,6 +202,7 @@ export default function ImportAppraisalPage({ onActivity, onOpenStudentEdit }) {
         } else {
             preview.rows.forEach((row, index) => {
                 if (!row.subject_code || row.subject_code.trim() === '') missing.push(`Row ${index + 1} Subject Code`);
+                if (!row.school_year || row.school_year.trim() === '') missing.push(`Row ${index + 1} School Year`);
             });
         }
         return missing;
@@ -212,6 +237,8 @@ export default function ImportAppraisalPage({ onActivity, onOpenStudentEdit }) {
             setLoading(false)
         }
     }
+
+    const groupedRows = getGroupedRows();
 
     return (
         <div className="page active">
@@ -336,82 +363,88 @@ export default function ImportAppraisalPage({ onActivity, onOpenStudentEdit }) {
                         </div>
                     </div>
 
-                    {/* Subjects table */}
-                    <div className="table-card min" style={{ marginBottom: 24 }}>
-                        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <h3 style={{ margin: 0, fontWeight: 600 }}>Grades To Import <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 400 }}>({preview.rows.length} subjects)</span></h3>
-                            <button className="btn btn-ghost" onClick={handleAddRow} style={{ fontSize: '0.85rem' }}>+ Add Row</button>
-                        </div>
-                        <table className="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Subject Code</th>
-                                    <th>Description</th>
-                                    <th>Units</th>
-                                    <th>Midterm</th>
-                                    <th>Final</th>
-                                    <th>Sem</th>
-                                    <th>Instructor</th>
-                                    <th style={{ width: 50 }}></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {preview.rows.map((s, i) => (
-                                    <tr key={i}>
-                                        <td>
-                                            <EditableField
-                                                value={s.subject_code}
-                                                onSave={(val) => handleRowChange(i, 'subject_code', val.toUpperCase())}
-                                            />
-                                        </td>
-                                        <td>
-                                            <EditableField
-                                                value={s.subject_name}
-                                                onSave={(val) => handleRowChange(i, 'subject_name', val)}
-                                            />
-                                        </td>
-                                        <td>
-                                            <EditableField
-                                                value={s.units}
-                                                onSave={(val) => handleRowChange(i, 'units', parseInt(val))}
-                                            />
-                                        </td>
-                                        <td>
-                                            <EditableField
-                                                value={s.midterm_grade}
-                                                onSave={(val) => handleRowChange(i, 'midterm_grade', parseFloat(val))}
-                                            />
-                                        </td>
-                                        <td>
-                                            <EditableField
-                                                value={s.final_grade}
-                                                onSave={(val) => handleRowChange(i, 'final_grade', parseFloat(val))}
-                                            />
-                                        </td>
-                                        <td>
-                                            <EditableField
-                                                value={s.semester}
-                                                onSave={(val) => handleRowChange(i, 'semester', parseInt(val))}
-                                            />
-                                        </td>
-                                        <td>
-                                            <EditableField
-                                                value={s.instructor}
-                                                onSave={(val) => handleRowChange(i, 'instructor', val)}
-                                            />
-                                        </td>
-                                        <td>
-                                            <button onClick={() => handleDeleteRow(i)} style={{ background: 'none', border: 'none', color: 'var(--accent-red)', cursor: 'pointer', padding: 4 }}>
-                                                <IconTrash />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                                {preview.rows.length === 0 && (
-                                    <tr><td colSpan="8" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>No grade records found. Click "+ Add Row" to add manually.</td></tr>
-                                )}
-                            </tbody>
-                        </table>
+                    {/* Grouped Subjects Tables */}
+                    <div className="preview-sections">
+                        {Object.keys(groupedRows).sort().map(key => {
+                            const [year, sem] = key.split('-').map(Number);
+                            const rows = groupedRows[key];
+
+                            return (
+                                <div className="table-card min" style={{ marginBottom: 32 }} key={key}>
+                                    <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-raised)' }}>
+                                        <h3 style={{ margin: 0, fontWeight: 700, fontSize: '0.95rem', color: 'var(--accent-blue)' }}>
+                                            {getSectionTitle(key)}
+                                        </h3>
+                                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{rows.length} subjects</span>
+                                    </div>
+                                    <table className="data-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Subject Code</th>
+                                                <th>Description</th>
+                                                <th style={{ width: 60, textAlign: 'center' }}>Units</th>
+                                                <th style={{ width: 80, textAlign: 'center' }}>Midterm</th>
+                                                <th style={{ width: 80, textAlign: 'center' }}>Final</th>
+                                                <th>Instructor</th>
+                                                <th style={{ width: 50 }}></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {rows.map((s) => (
+                                                <tr key={s.originalIndex}>
+                                                    <td>
+                                                        <EditableField
+                                                            value={s.subject_code}
+                                                            onSave={(val) => handleRowChange(s.originalIndex, 'subject_code', val.toUpperCase())}
+                                                        />
+                                                    </td>
+                                                    <td>
+                                                        <EditableField
+                                                            value={s.subject_name}
+                                                            onSave={(val) => handleRowChange(s.originalIndex, 'subject_name', val)}
+                                                        />
+                                                    </td>
+                                                    <td style={{ textAlign: 'center' }}>
+                                                        <EditableField
+                                                            value={s.units}
+                                                            onSave={(val) => handleRowChange(s.originalIndex, 'units', parseInt(val))}
+                                                        />
+                                                    </td>
+                                                    <td style={{ textAlign: 'center' }}>
+                                                        <EditableField
+                                                            value={s.midterm_grade}
+                                                            onSave={(val) => handleRowChange(s.originalIndex, 'midterm_grade', parseFloat(val))}
+                                                        />
+                                                    </td>
+                                                    <td style={{ textAlign: 'center' }}>
+                                                        <EditableField
+                                                            value={s.final_grade}
+                                                            onSave={(val) => handleRowChange(s.originalIndex, 'final_grade', parseFloat(val))}
+                                                        />
+                                                    </td>
+                                                    <td>
+                                                        <EditableField
+                                                            value={s.instructor}
+                                                            onSave={(val) => handleRowChange(s.originalIndex, 'instructor', val)}
+                                                        />
+                                                    </td>
+                                                    <td>
+                                                        <button onClick={() => handleDeleteRow(s.originalIndex)} style={{ background: 'none', border: 'none', color: 'var(--accent-red)', cursor: 'pointer', padding: 4 }}>
+                                                            <IconTrash />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                    <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)' }}>
+                                        <button className="btn btn-ghost sm" onClick={() => handleAddRow(year, sem)} style={{ fontSize: '0.85rem' }}>
+                                            <IconPlus /> Add Row to this Semester
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
 
                     {error && <div style={{ marginBottom: 16, padding: '12px 16px', borderRadius: 8, background: 'rgba(248,113,113,0.1)', color: 'var(--accent-red)', fontSize: '0.875rem' }}>{error}</div>}
@@ -462,7 +495,9 @@ export default function ImportAppraisalPage({ onActivity, onOpenStudentEdit }) {
                 </div>
             )}
 
-            <ImportHistory type="Appraisal" />
+            <div style={{ marginTop: '28px', maxHeight: '350px', overflowY: 'auto' }}>
+                <ImportHistory type="Appraisal" />
+            </div>
         </div>
     )
 }

@@ -15,6 +15,8 @@ class GradeCreate(BaseModel):
 
 
 class GradeUpdate(BaseModel):
+    subject_code: Optional[str] = None
+    subject_name: Optional[str] = None
     midterm: Optional[float] = None
     finals: Optional[float] = None
     grade: Optional[float] = None

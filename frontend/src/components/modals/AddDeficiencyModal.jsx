@@ -11,6 +11,7 @@ export default function AddDeficiencyModal({ isOpen, onClose, onSaved, initialSt
   const [form, setForm] = useState({
     student_id: '',
     subject_code: '',
+    subject_name: '',
     type: 'Incomplete',
     semester: '1',
     school_year: '2025-2026',
@@ -55,6 +56,7 @@ export default function AddDeficiencyModal({ isOpen, onClose, onSaved, initialSt
       setForm({
         student_id: '',
         subject_code: '',
+        subject_name: '',
         type: 'Incomplete',
         semester: '1',
         school_year: '2025-2026',
@@ -90,6 +92,9 @@ export default function AddDeficiencyModal({ isOpen, onClose, onSaved, initialSt
         </FormGroup>
         <FormGroup label="Subject Code" required>
           <FormInput value={form.subject_code} onChange={(e) => set('subject_code', e.target.value)} placeholder="e.g. MATH101" />
+        </FormGroup>
+        <FormGroup label="Subject Name">
+          <FormInput value={form.subject_name} onChange={(e) => set('subject_name', e.target.value)} placeholder="e.g. Ethics" />
         </FormGroup>
         <FormGroup label="Deficiency Type">
           <FormSelect value={form.type} onChange={(e) => set('type', e.target.value)}>

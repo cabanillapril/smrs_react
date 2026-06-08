@@ -203,7 +203,7 @@ export default function DeficienciesPage({ onAdd, onViewStudent }) {
 
                   <td className="actions-cell">
                     <div className="deficiency-actions" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                      {/* Always show resolve when pending; otherwise show disabled icon */}
+
                       {d.status === 'pending' ? (
                         <button
                           className="action-btn resolve"

@@ -21,6 +21,7 @@ export default function EditStudentModal({ isOpen, onClose, onSaved, student }) 
     year_level: '1',
     section: '',
     status: 'Regular',
+    adviser: '',
   })
   const [loading, setLoading] = useState(false)
 
@@ -41,6 +42,7 @@ export default function EditStudentModal({ isOpen, onClose, onSaved, student }) 
         year_level: String(student.year_level || 1),
         section: student.section || '',
         status: student.status || 'Regular',
+        adviser: student.adviser || '',
       })
     }
   }, [student])
@@ -106,6 +108,9 @@ export default function EditStudentModal({ isOpen, onClose, onSaved, student }) 
           <FormGroup label="Contact Number">
             <FormInput value={form.contact_number} onChange={(e) => set('contact_number', e.target.value)} />
           </FormGroup>
+          <FormGroup label="Adviser">
+            <FormInput value={form.adviser} onChange={(e) => set('adviser', e.target.value)} />
+          </FormGroup>
           <div style={{ gridColumn: '1 / -1' }}>
             <FormGroup label="Full Address">
               <FormInput value={form.address} onChange={(e) => set('address', e.target.value)} />
@@ -140,9 +145,9 @@ export default function EditStudentModal({ isOpen, onClose, onSaved, student }) 
             </FormSelect>
           </FormGroup>
           <FormGroup label="Section">
-            <FormInput 
-              value={form.section} 
-              onChange={(e) => set('section', e.target.value.toUpperCase().substring(0,1))} 
+            <FormInput
+              value={form.section}
+              onChange={(e) => set('section', e.target.value.toUpperCase().substring(0, 1))}
               placeholder="A-Z"
               maxLength="1"
             />

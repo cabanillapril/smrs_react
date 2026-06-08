@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text, inspect
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 from sqlalchemy.engine import Engine
 import os
@@ -33,4 +33,14 @@ def get_db():
 def init_db():
     from ..models import students_model, grade_model, deficiencies_model, curriculum_model, subjects_model, import_log_model, enrollment_model
     Base.metadata.create_all(bind=engine)
+    
+    # Manual Migration: Add 'adviser' column if it doesn't exist in the physical DB
+    inspector = inspect(engine)
+    if 'students' in inspector.get_table_names():
+        columns = [c['name'] for c in inspector.get_columns('students')]
+        if 'adviser' not in columns:
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE students ADD COLUMN adviser TEXT"))
+                conn.commit()
+
     print(f"[DB] Database initialized at {DB_PATH}")

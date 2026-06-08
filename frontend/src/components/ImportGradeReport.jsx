@@ -535,7 +535,9 @@ export default function ImportGradeReport({ onActivity }) {
                 </div>
             )}
 
-            <ImportHistory type="Grade Report" />
+            <div style={{ marginTop: '48px', maxHeight: '350px', overflowY: 'auto' }}>
+                <ImportHistory type="Grade Report" />
+            </div>
         </div>
     )
 }

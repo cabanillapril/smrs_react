@@ -33,7 +33,9 @@ def update(db: Session, grade_id: int, data: GradeUpdate):
     grade = db.query(Grade).filter(Grade.grade_id == grade_id).first()
     if not grade:
         return None
-    for k, v in data.model_dump(exclude_unset=True).items():
+    # Exclude non-model fields before updating attributes
+    update_data = data.model_dump(exclude_unset=True, exclude={'subject_code', 'subject_name'})
+    for k, v in update_data.items():
         setattr(grade, k, v)
     db.commit()
     db.refresh(grade)

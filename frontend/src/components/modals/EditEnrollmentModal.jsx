@@ -5,6 +5,8 @@ import { enrollmentService } from '../../services/api'
 
 export default function EditEnrollmentModal({ isOpen, onClose, onSaved, enrollment }) {
   const [form, setForm] = useState({
+    subject_code: '',
+    subject_name: '',
     units: '',
     instructor: '',
     semester: '1',
@@ -17,6 +19,8 @@ export default function EditEnrollmentModal({ isOpen, onClose, onSaved, enrollme
   useEffect(() => {
     if (isOpen && enrollment) {
       setForm({
+        subject_code: enrollment.subject_code || '',
+        subject_name: enrollment.subject_name || '',
         units: enrollment.units?.toString() || '3',
         instructor: enrollment.instructor || '',
         semester: enrollment.semester?.toString() || '1',
@@ -32,9 +36,12 @@ export default function EditEnrollmentModal({ isOpen, onClose, onSaved, enrollme
 
   async function handleSave() {
     if (!enrollment) return
+    if (!form.subject_code.trim()) return
     setLoading(true)
     try {
       await enrollmentService.update(enrollment.enrollment_id, {
+        subject_code: form.subject_code.trim().toUpperCase(),
+        subject_name: form.subject_name.trim() || null,
         semester: parseInt(form.semester),
         school_year: form.school_year || null,
         instructor: form.instructor || null,
@@ -53,10 +60,21 @@ export default function EditEnrollmentModal({ isOpen, onClose, onSaved, enrollme
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Edit Enrolled Subject" size="narrow">
       <div className="modal-body">
-        <div style={{ marginBottom: 16, color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-          Subject: <b style={{ color: 'var(--text-normal)' }}>{enrollment?.subject_code}</b>
-          {enrollment?.subject_name && ` — ${enrollment.subject_name}`}
-        </div>
+        <FormGroup label="Subject Code" required>
+          <FormInput
+            value={form.subject_code}
+            onChange={(e) => set('subject_code', e.target.value)}
+            placeholder="e.g. CSP110"
+          />
+        </FormGroup>
+
+        <FormGroup label="Subject Name">
+          <FormInput
+            value={form.subject_name}
+            onChange={(e) => set('subject_name', e.target.value)}
+            placeholder="e.g. Software Engineering"
+          />
+        </FormGroup>
 
         <FormGroup label="Units" required>
           <FormInput
@@ -72,7 +90,7 @@ export default function EditEnrollmentModal({ isOpen, onClose, onSaved, enrollme
           <FormInput
             value={form.instructor}
             onChange={(e) => set('instructor', e.target.value)}
-            placeholder="e.g. C. Reotutar"
+            placeholder="e.g. C. De Leon"
           />
         </FormGroup>
 

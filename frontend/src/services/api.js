@@ -70,6 +70,7 @@ export const studentService = {
   update: (id, data) => apiFetch(`/students/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id) => apiFetch(`/students/${id}`, { method: 'DELETE' }),
   promote: () => apiFetch('/students/promote', { method: 'POST' }),
+  promoteIndividual: (id) => apiFetch(`/students/${id}/individual-promote`, { method: 'POST' }),
 }
 
 export const deficiencyService = {
@@ -81,6 +82,7 @@ export const deficiencyService = {
       method: 'PATCH',
       body: JSON.stringify({ date_resolved: dateResolved }),
     }),
+  update: (id, data) => apiFetch(`/deficiencies/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id) => apiFetch(`/deficiencies/${id}`, { method: 'DELETE' }),
 }
 

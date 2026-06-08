@@ -21,6 +21,7 @@ export default function AddStudentModal({ isOpen, onClose, onSaved }) {
     year_level: '1',
     section: '',
     status: 'Regular',
+    adviser: '',
   })
   const [loading, setLoading] = useState(false)
 
@@ -52,6 +53,7 @@ export default function AddStudentModal({ isOpen, onClose, onSaved }) {
         year_level: '1',
         section: '',
         status: 'Regular',
+        adviser: '',
       })
       onSaved()
       onClose()
@@ -101,6 +103,9 @@ export default function AddStudentModal({ isOpen, onClose, onSaved }) {
           <FormGroup label="Contact Number">
             <FormInput value={form.contact_number} onChange={(e) => set('contact_number', e.target.value)} placeholder="09XX-XXX-XXXX" />
           </FormGroup>
+          <FormGroup label="Adviser">
+            <FormInput value={form.adviser} onChange={(e) => set('adviser', e.target.value)} placeholder="e.g. C. De Leon" />
+          </FormGroup>
           <div style={{ gridColumn: '1 / -1' }}>
             <FormGroup label="Full Address">
               <FormInput value={form.address} onChange={(e) => set('address', e.target.value)} placeholder="House No., Street, City, Province" />
@@ -135,9 +140,9 @@ export default function AddStudentModal({ isOpen, onClose, onSaved }) {
             </FormSelect>
           </FormGroup>
           <FormGroup label="Section">
-            <FormInput 
-              value={form.section} 
-              onChange={(e) => set('section', e.target.value.toUpperCase().substring(0,1))} 
+            <FormInput
+              value={form.section}
+              onChange={(e) => set('section', e.target.value.toUpperCase().substring(0, 1))}
               placeholder="A-Z"
               maxLength="1"
             />

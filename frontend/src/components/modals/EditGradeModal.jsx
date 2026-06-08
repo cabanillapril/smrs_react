@@ -6,6 +6,7 @@ import { gradeService } from '../../services/api'
 
 export default function EditGradeModal({ isOpen, onClose, onSaved, grade }) {
     const [form, setForm] = useState({
+        subject_name: '',
         midterm: '',
         finals: '',
         grade: '',
@@ -21,6 +22,7 @@ export default function EditGradeModal({ isOpen, onClose, onSaved, grade }) {
         if (!isOpen) return
         if (!grade) return
         setForm({
+            subject_name: grade.subject_name ?? '',
             midterm: grade.midterm ?? '',
             finals: grade.finals ?? '',
             grade: grade.grade ?? '',
@@ -40,6 +42,7 @@ export default function EditGradeModal({ isOpen, onClose, onSaved, grade }) {
         setLoading(true)
         try {
             await gradeService.update(grade.grade_id, {
+                subject_name: form.subject_name || null,
                 midterm: form.midterm !== '' ? parseFloat(form.midterm) : null,
                 finals: form.finals !== '' ? parseFloat(form.finals) : null,
                 grade: form.grade !== '' ? parseFloat(form.grade) : null,
@@ -68,6 +71,10 @@ export default function EditGradeModal({ isOpen, onClose, onSaved, grade }) {
                 <div style={{ marginBottom: 12, color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                     <b>{grade?.subject_code}</b> — {grade?.student_name || grade?.student_id}
                 </div>
+
+                <FormGroup label="Subject Name">
+                    <FormInput value={form.subject_name} onChange={(e) => set('subject_name', e.target.value)} placeholder="e.g. Software Engineering" />
+                </FormGroup>
 
                 <FormGroup label="Instructor">
                     <FormInput value={form.instructor} onChange={(e) => set('instructor', e.target.value)} placeholder="Instructor Name (Optional)" />

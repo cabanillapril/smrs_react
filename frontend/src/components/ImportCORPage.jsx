@@ -464,7 +464,9 @@ export default function ImportCORPage({ onActivity, onViewStudent }) {
                 </div>
             )}
 
-            <ImportHistory type="COR" />
+            <div style={{ marginTop: '48px', maxHeight: '350px', overflowY: 'auto' }}>
+                <ImportHistory type="COR" />
+            </div>
         </div>
     )
 }

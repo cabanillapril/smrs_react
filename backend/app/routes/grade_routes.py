@@ -16,10 +16,13 @@ router = APIRouter()
 class GradeIn(BaseModel):
     student_id: str
     subject_code: str
+    subject_name: Optional[str] = None
     midterm_grade: Optional[float] = None
     final_grade: Optional[float] = None
     semester: Optional[str] = None
     school_year: Optional[str] = None
+    instructor: Optional[str] = None
+    
 
 
 def _compute_final(midterm: Optional[float], finals: Optional[float]) -> Optional[float]:
@@ -73,24 +76,29 @@ def create_grade(data: GradeIn, db: Session = Depends(get_db)):
     if not subject:
         subject = Subject(
             subject_code=code,
-            subject_name=code,
+            subject_name=data.subject_name.strip() if data.subject_name else code,
             unit=3,
         )
         db.add(subject)
-        db.commit()
-        db.refresh(subject)
+    elif data.subject_name and data.subject_name.strip():
+        # Always update name if the user provided one
+        subject.subject_name = data.subject_name.strip()
+    
+    db.commit()
+    db.refresh(subject)
 
     final = _compute_final(data.midterm_grade, data.final_grade)
 
     entry = Grade(
         student_id=data.student_id,
         subject_id=subject.subject_id,
-        semester=1,
+        semester=int(data.semester) if data.semester else 1,
         school_year=data.school_year,
         midterm=data.midterm_grade,
         finals=data.final_grade,
         grade=final if final is not None else 0.0,
         remarks=_remarks(final),
+        instructor=data.instructor,
     )
     db.add(entry)
     db.commit()
@@ -101,9 +109,35 @@ def create_grade(data: GradeIn, db: Session = Depends(get_db)):
 
 @router.put("/{grade_id}", response_model=GradeOut)
 def update_grade(grade_id: int, data: GradeUpdate, db: Session = Depends(get_db)):
-    grade = grade_repo.update(db, grade_id, data)
-    if not grade:
+    grade_obj = db.query(Grade).filter(Grade.grade_id == grade_id).first()
+    if not grade_obj:
         raise HTTPException(status_code=404, detail="Grade not found")
+
+    # Handle Subject Code/Name updates
+    target_subject_id = grade_obj.subject_id
+    if data.subject_code:
+        code = data.subject_code.strip().upper()
+        subject = db.query(Subject).filter(Subject.subject_code == code).first()
+        if not subject:
+            subject = Subject(
+                subject_code=code,
+                subject_name=data.subject_name.strip() if data.subject_name else code,
+                unit=3,
+            )
+            db.add(subject)
+        db.commit()
+        db.refresh(subject)
+        target_subject_id = subject.subject_id
+
+    if data.subject_name and data.subject_name.strip():
+        subject = db.query(Subject).filter(Subject.subject_id == target_subject_id).first()
+        if subject:
+            subject.subject_name = data.subject_name.strip()
+            db.commit()
+
+    grade_obj.subject_id = target_subject_id
+
+    grade = grade_repo.update(db, grade_id, data)
     sync_deficiency_from_grade(db, grade["student_id"], grade["subject_id"], grade["semester"], grade["remarks"], grade["school_year"])
     return grade
 

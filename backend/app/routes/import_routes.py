@@ -41,6 +41,7 @@ class AppraisalSubject(BaseModel):
     midterm_grade: Optional[float] = None
     final_grade: Optional[float] = None
     semester: Optional[int] = 1
+    year_level: Optional[int] = 1
     school_year: Optional[str] = ""
     instructor: Optional[str] = ""
 
@@ -455,44 +456,11 @@ _YEAR_ORDINAL = {'first': 1, 'second': 2, 'third': 3, 'fourth': 4, 'fifth': 5}
 # Maps semester labels to integers
 _SEM_MAP = {'first': 1, '1st': 1, 'second': 2, '2nd': 2, 'summer': 3}
 
-# Section header pattern: e.g. "First Year - First Semester" or "Second Year - Second Semester"
+# Section header pattern
 _SECTION_HEADER = re.compile(
-    r'(First|Second|Third|Fourth|Fifth)\s+Year\s*[-\u2013\u2014]\s*(First|Second|Summer)\s+Semester',
+    r'(First|Second|Third|Fourth|Fifth)\s+Year\s*[-\u2013\u2014\s:]+\s*(First|Second|Summer|3rd)\s+Semester',
     re.IGNORECASE,
 )
-
-# Subject line WITH grades — primary: code includes letter tokens + course number
-# e.g. "ELEX 121", "Ind Draw 101", "Soc Sci 101", "Math 101", "PATHFIT 101", "NSTP 1"
-_SUBJECT_WITH_GRADES_NUMBERED = re.compile(
-    r'^'
-    r'(?P<code>[A-Za-z][A-Za-z0-9]*(?:\s+[A-Za-z][A-Za-z0-9]*)?\s+\d+(?:\s+\d+)?)'
-    r'\s+'
-    r'(?P<title>.+?)'
-    r'\s+(?P<units>\(?\d+\)?)'
-    r'\s+(?P<mid>\d+\.\d+)'
-    r'\s+(?P<fin>\d+\.\d+)'
-    r'\s+(?:1st|2nd|3rd|Summer)\s*sem(?:ester)?'
-    r'(?:\s+(?P<instructor>.+))?'
-    r'$',
-    re.IGNORECASE,
-)
-
-# Subject line WITH grades — fallback: plain alphabetic code with no course number
-# e.g. "STS", "Ethics", "Rizal", "OJT"
-_SUBJECT_WITH_GRADES_PLAIN = re.compile(
-    r'^'
-    r'(?P<code>[A-Z]{2,10})'
-    r'\s+'
-    r'(?P<title>.+?)'
-    r'\s+(?P<units>\(?\d+\)?)'
-    r'\s+(?P<mid>\d+\.\d+)'
-    r'\s+(?P<fin>\d+\.\d+)'
-    r'\s+(?:1st|2nd|3rd|Summer)\s*sem(?:ester)?'
-    r'(?:\s+(?P<instructor>.+))?'
-    r'$',
-    re.IGNORECASE,
-)
-
 
 def _match_subject_line(line: str):
     """Try both subject-line patterns; return the first match or None."""
@@ -508,40 +476,83 @@ def _normalize_units(raw: str) -> int:
     return int(cleaned) if cleaned else 3
 
 
-def _parse_semester_word(word: str) -> int:
-    """Convert 'First', '1st', 'Second', '2nd', 'Summer' etc. to integer."""
-    w = word.lower().strip()
-    return _SEM_MAP.get(w, 1)
-
-
-def preprocess_appraisal_text(raw: str) -> str:
-    """
-    The native PDF text for UNP appraisals has the ordinal suffix of the semester
-    on a separate line because it was typeset as a superscript.  Example:
-
-        ELEX 121 Electronics Theory ... 6 1.25 2.75 1\r\r\nst sem Rabanal
-
-    We join such split lines back into one before parsing.
-    """
-    # Normalize all CR/LF variants to plain newline
+def preprocess_appraisal_text(raw: str) -> List[str]:
     text = raw.replace('\r\r\n', '\n').replace('\r\n', '\n').replace('\r', '\n')
+    return [line.strip() for line in text.splitlines() if line.strip()]
 
-    lines = text.splitlines()
-    merged: List[str] = []
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        # Check if the *next* line starts with an ordinal suffix continuation like "st sem", "nd sem", "rd sem"
-        if i + 1 < len(lines):
-            nxt = lines[i + 1].strip()
-            if re.match(r'^(?:st|nd|rd)\s+sem', nxt, re.IGNORECASE):
-                line = line.rstrip() + nxt  # join without space gap; regex will handle
-                i += 2
-                merged.append(line)
-                continue
-        merged.append(line)
-        i += 1
-    return '\n'.join(merged)
+def _parse_appraisal_chunk(lines: List[str], current_year: int, current_sem: int) -> Optional[dict]:
+    """Parses a list of lines representing a single subject entry."""
+    full_text = " ".join(lines)
+    
+    # 1. Identify Subject Code (Anchored by letters followed by numbers, or specific plain codes)
+    # We use re.search because noise like student names might precede the code on the same line.
+    code_pattern = re.compile(r'\b([A-Za-z]{2,}(?:\s+[A-Za-z0-9]+)?\s+\d+|ETHICS|RIZAL|STS|OJT|PCOM|PATHFIT|NSTP\s*\d|GE\s+[A-Z0-9]+)\b', re.IGNORECASE)
+    m_code = code_pattern.search(full_text)
+    if not m_code:
+        return None
+    
+    subject_code = m_code.group(1).upper().strip()
+    # Text after the subject code contains the title, units, grades, and instructor
+    remaining_text = full_text[m_code.end():].strip()
+
+    # 2. Extract Numbers (Units, Midterm, Final)
+    # Look for tokens that are grades (1.0-5.0) or units (integers)
+    # We exclude the code from this search by using the remaining_text
+    num_pattern = re.compile(r'\b(\d+(?:\.\d+)?|INC)\b', re.IGNORECASE)
+    tokens = [t.group(1) for t in num_pattern.finditer(remaining_text)]
+    
+    if len(tokens) < 1:
+        return None # No grades found
+
+    # Vertical layout adjustment: 
+    # Sometimes the semester digit (1 or 2) appears as the first number.
+    # If we have 4+ numbers and the first is 1 or 2, and the second is a likely unit (e.g. 3, 6), 
+    # we shift the mapping to skip the semester digit.
+    offset = 0
+    if len(tokens) >= 3 and tokens[0] in ('1', '2') and tokens[1] in ('1', '2', '3', '6', '12'):
+        # Likely: [Semester, Units, Grade, ...]
+        offset = 1
+
+    units = 3
+    mid = None
+    fin = None
+
+    relevant_tokens = tokens[offset:]
+    if len(relevant_tokens) >= 3:
+        units = _normalize_units(relevant_tokens[0])
+        mid = parse_grade_token(relevant_tokens[1])
+        fin = parse_grade_token(relevant_tokens[2])
+    elif len(relevant_tokens) == 2:
+        mid = parse_grade_token(relevant_tokens[0])
+        fin = parse_grade_token(relevant_tokens[1])
+    elif len(relevant_tokens) == 1:
+        fin = parse_grade_token(relevant_tokens[0])
+
+    # 3. Description & Instructor
+    # Description is between the Code and the first Grade/Unit token
+    first_num_match = num_pattern.search(remaining_text)
+    subject_name = remaining_text[:first_num_match.start()].strip() if first_num_match else remaining_text
+    
+    # Instructor is after the last Grade token
+    last_num_match = list(num_pattern.finditer(remaining_text))[-1]
+    instructor_raw = remaining_text[last_num_match.end():].strip()
+    # Clean instructor from noise like "st sem"
+    instructor = re.sub(r'^(?:st|nd|rd|th)?\s*sem(?:ester)?\s*', '', instructor_raw, flags=re.IGNORECASE).strip()
+    # Truncate at known "stop" keywords that signal the end of a subject row or start of metadata
+    instructor = re.split(r'\b(TOTAL|Adviser|Republic|University|College|Tamag|Ilocos|Bachelor|Major|Name|Home)\b', instructor, flags=re.IGNORECASE)[0].strip()
+    if instructor == "—": instructor = ""
+
+    return {
+        'subject_code': subject_code,
+        'subject_name': subject_name or subject_code,
+        'units': units,
+        'midterm_grade': mid,
+        'final_grade': fin,
+        'semester': current_sem,
+        'year_level': current_year,
+        'school_year': '',
+        'instructor': instructor
+    }
 
 
 def extract_student_info_from_appraisal(text: str) -> dict:
@@ -604,8 +615,8 @@ def extract_subject_rows_from_appraisal(text: str) -> List[dict]:
     Parse the subject table rows from a UNP Curriculum Appraisal document.
 
     The document is divided into sections like:
-        First Year - First Semester
-        ...
+        First Year - First Semester 
+        ... 
         Second Year - Second Semester
         ...
 
@@ -615,7 +626,7 @@ def extract_subject_rows_from_appraisal(text: str) -> List[dict]:
     We return *only* the rows that actually have grade data so the import is
     meaningful; curriculum rows without grades are skipped.
     """
-    text = preprocess_appraisal_text(text)
+    processed_lines = preprocess_appraisal_text(text)
 
     # Skip header / table-header noise lines
     _SKIP = re.compile(
@@ -624,47 +635,46 @@ def extract_subject_rows_from_appraisal(text: str) -> List[dict]:
         r'College|Bachelor|Ladder|\d{4})',
         re.IGNORECASE,
     )
+    
+    # Subject code anchor to split chunks
+    code_start_pattern = re.compile(r'\b(?:[A-Za-z]{2,}(?:\s+[A-Za-z0-9]+)?\s+\d+|ETHICS|RIZAL|STS|OJT|PCOM|PATHFIT)\b', re.IGNORECASE)
 
     rows: List[dict] = []
-    current_semester = 1  # default
-
-    for line in text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-
-        # Detect section header to track current semester
+    current_sem = 1
+    current_year = 1
+    
+    # Partition lines into chunks by subject start or section header
+    chunks: List[List[str]] = []
+    current_chunk: List[str] = []
+    
+    for line in processed_lines:
         sec_match = _SECTION_HEADER.search(line)
+        is_new_subj = code_start_pattern.search(line) and not _SKIP.search(line)
+        
+        if sec_match or is_new_subj:
+            if current_chunk:
+                chunks.append(current_chunk)
+            current_chunk = [line]
+        else:
+            current_chunk.append(line)
+    if current_chunk:
+        chunks.append(current_chunk)
+
+    # Process chunks
+    for chunk in chunks:
+        first_line = chunk[0]
+        sec_match = _SECTION_HEADER.search(first_line)
         if sec_match:
-            sem_word = sec_match.group(2)  # e.g. 'First', 'Second', 'Summer'
-            current_semester = _parse_semester_word(sem_word)
-            continue
-
-        if _SKIP.match(line):
-            continue
-
-        # Try to match a subject line WITH grades
-        m = _match_subject_line(line)
-        if m:
-            mid = parse_grade_token(m.group('mid'))
-            fin = parse_grade_token(m.group('fin'))
-            if mid is not None or fin is not None:
-                # Keep spaces in code for readability (e.g. 'ELEX 121', 'Ind Draw 101')
-                code = m.group('code').strip().upper()
-                rows.append({
-                    'subject_code': code,
-                    'subject_name': m.group('title').strip(),
-                    'units': _normalize_units(m.group('units')),
-                    'midterm_grade': mid,
-                    'final_grade': fin,
-                    'semester': current_semester,
-                    'school_year': '',
-                    'instructor': (m.group('instructor') or '').strip(),
-                })
-            continue
-
-        # Lines without grades are curriculum-only — skip them for import
-        # (they would show up as empty subjects in the database)
+            current_year = _YEAR_ORDINAL.get(sec_match.group(1).lower(), 1)
+            sem_word = sec_match.group(2).lower()
+            current_sem = 1 if 'first' in sem_word or '1st' in sem_word else 2 if 'second' in sem_word or '2nd' in sem_word else 3
+            # If there's subject data in the same chunk as header, parse it too
+            if len(chunk) > 1 and code_start_pattern.search(" ".join(chunk[1:])):
+                data = _parse_appraisal_chunk(chunk[1:], current_year, current_sem)
+                if data: rows.append(data)
+        else:
+            data = _parse_appraisal_chunk(chunk, current_year, current_sem)
+            if data: rows.append(data)
 
     return rows
 
@@ -700,6 +710,8 @@ def parse_semester(token: str) -> Optional[int]:
         return 1
     if '2nd' in token or 'second' in token or token.strip() == '2':
         return 2
+    if 'summer' in token or '3rd' in token or token.strip() == '3':
+        return 3
     return None
 
 
@@ -902,9 +914,18 @@ def remarks_for_grade(final: Optional[float]) -> str:
 def find_student_by_name(db: Session, first_name: str, last_name: str) -> Optional[Student]:
     if not first_name or not last_name:
         return None
+        
+    # Do not attempt to match on generic placeholder names to avoid accidental merges
+    if first_name.lower() in ('unknown', 'student') or last_name.lower() in ('unknown', 'student'):
+        return None
+        
+    # Ignore extremely short names which are likely OCR noise
+    if len(first_name) < 2 or len(last_name) < 2:
+        return None
+
     return db.query(Student).filter(
-        Student.first_name.ilike(f'%{first_name}%'),
-        Student.last_name.ilike(f'%{last_name}%'),
+        Student.first_name.ilike(first_name),
+        Student.last_name.ilike(last_name),
     ).first()
 
 
@@ -976,14 +997,28 @@ def create_or_find_student(db: Session, student_data: dict) -> Student:
     return student_repo.create(db, schema)
 
 
-def find_or_create_subject(db: Session, subject_code: str, subject_name: str, units: Optional[int]) -> Subject:
+def find_or_create_subject(db: Session, subject_code: str, subject_name: Optional[str], units: Optional[int]) -> Subject:
     code = subject_code.strip().upper()
     if not code:
         raise ValueError('Subject code is required')
     subject = db.query(Subject).filter(Subject.subject_code == code).first()
+    
     if subject:
+        # Update existing subject name if the provided one is more descriptive
+        if subject_name and subject_name.strip():
+            candidate_name = subject_name.strip()
+            existing_name = (subject.subject_name or "").strip()            
+            
+            # Update if current name is empty OR is identical to the code 
+            # AND the new candidate name is actually a real description (not just the code again)
+            if (not existing_name or existing_name.upper() == code) and candidate_name.upper() != code:
+                subject.subject_name = candidate_name
+                db.commit()
         return subject
-    subject = Subject(subject_code=code, subject_name=subject_name or code, unit=units or 3)
+
+    # Creation path: Only fallback to code if subject_name is None or empty string
+    final_name = subject_name if (subject_name and subject_name.strip()) else code
+    subject = Subject(subject_code=code, subject_name=final_name, unit=units or 3)
     db.add(subject)
     db.commit()
     db.refresh(subject)
@@ -1038,7 +1073,7 @@ def create_grade_record(db: Session, student_id: str, row: dict) -> Grade:
     subject = find_or_create_subject(
         db,
         row['subject_code'],
-        row.get('subject_name', ''),
+        row.get('subject_name'), # Pass None if missing to avoid triggering code-fallback updates
         row.get('units'),
     )
     final_value = compute_final(row.get('midterm_grade'), row.get('final_grade'))
@@ -1717,16 +1752,24 @@ def commit_cor(data: CORCommitIn, db: Session = Depends(get_db)):
 
     # ── Resolve student ──────────────────────────────────────────────────────
     student_obj = None
-    if s.student_id:
-        student_obj = db.query(Student).filter(Student.student_id == s.student_id).first()
+    target_sid = (s.student_id or '').strip()
+    # Ignore placeholder characters commonly produced by OCR errors
+    if target_sid == '-':
+        target_sid = ''
 
-    if not student_obj and s.student_name:
-        # Try matching by name
-        parts = s.student_name.replace(',', ' ').split()
-        if parts:
-            student_obj = db.query(Student).filter(
-                Student.last_name.ilike(f'%{parts[0]}%')
-            ).first()
+    if target_sid:
+        student_obj = db.query(Student).filter(Student.student_id == target_sid).first()
+
+    if not student_obj:
+        # Prioritize specific name fields if provided, fallback to parsing the raw name string
+        fn = (s.first_name or '').strip()
+        ln = (s.last_name or '').strip()
+        if not fn and not ln:
+            fn, _mn, ln = parse_name_field(s.student_name or '')
+        
+        # Only attempt name matching if the names aren't generic placeholders
+        if fn and ln and fn.lower() != 'unknown' and ln.lower() != 'student':
+            student_obj = find_student_by_name(db, fn, ln)
 
     if not student_obj:
         if s.first_name or s.last_name:
@@ -1737,12 +1780,16 @@ def commit_cor(data: CORCommitIn, db: Session = Depends(get_db)):
             # Parse name using the unified parse_name_field function
             first, middle, last = parse_name_field(s.student_name or '')
 
+        # Use sanitized ID or generate a unique temporary one to avoid conflicts
+        import uuid
+        final_sid = target_sid if target_sid else f"TMP-{uuid.uuid4().hex[:8].upper()}"
+
         from ..schemas.student_schema import StudentCreate as SC
         schema = SC(
             first_name=first or 'Unknown',
             last_name=last or 'Unknown',
             middle_name=middle,
-            student_id=s.student_id,
+            student_id=final_sid,
             course=norm_course,
             major=final_major,
             year_level=s.year_level,
@@ -1767,6 +1814,9 @@ def commit_cor(data: CORCommitIn, db: Session = Depends(get_db)):
                     ).params(oid=target_old).update({model.student_id: new_sid}, synchronize_session=False)
                 
                 student_obj.student_id = new_sid
+                if s.first_name: student_obj.first_name = s.first_name
+                if s.last_name: student_obj.last_name = s.last_name
+                if s.middle_name is not None: student_obj.middle_name = s.middle_name
                 if norm_course: student_obj.course = norm_course
                 if final_major: student_obj.major = final_major
                 if s.year_level: student_obj.year_level = s.year_level
@@ -1775,6 +1825,9 @@ def commit_cor(data: CORCommitIn, db: Session = Depends(get_db)):
             finally:
                 db.execute(text("PRAGMA foreign_keys = ON"))
         else:
+            if s.first_name: student_obj.first_name = s.first_name
+            if s.last_name: student_obj.last_name = s.last_name
+            if s.middle_name is not None: student_obj.middle_name = s.middle_name
             if norm_course: student_obj.course = norm_course
             if final_major: student_obj.major = final_major
             if s.year_level: student_obj.year_level = s.year_level
@@ -1789,17 +1842,13 @@ def commit_cor(data: CORCommitIn, db: Session = Depends(get_db)):
     # ── Upsert subjects and create enrollments ───────────────────────────────
     count = 0
     for row in data.subjects:
-        code = row.subject_code.strip().upper()
-        subject = db.query(Subject).filter(Subject.subject_code == code).first()
-        if not subject:
-            subject = Subject(
-                subject_code=code,
-                subject_name=row.subject_name or code,
-                unit=int(row.units) if row.units else 3
-            )
-            db.add(subject)
-            db.commit()
-            db.refresh(subject)
+        # Use unified helper to handle creation and descriptive name 'healing'
+        subject = find_or_create_subject(
+            db, 
+            row.subject_code, 
+            row.subject_name, 
+            int(row.units) if row.units else None
+        )
 
         # Check for existing enrollment
         existing_enroll = db.query(Enrollment).filter(

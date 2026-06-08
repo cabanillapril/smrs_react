@@ -6,6 +6,7 @@ import { enrollmentService } from '../../services/api'
 export default function AddEnrollmentModal({ isOpen, onClose, onSaved, studentId = '' }) {
   const [form, setForm] = useState({
     subject_code: '',
+    subject_name: '',
     units: '3',
     instructor: '',
     semester: '1',
@@ -19,6 +20,7 @@ export default function AddEnrollmentModal({ isOpen, onClose, onSaved, studentId
     if (isOpen) {
       setForm({
         subject_code: '',
+        subject_name: '',
         units: '3',
         instructor: '',
         semester: '1',
@@ -38,12 +40,13 @@ export default function AddEnrollmentModal({ isOpen, onClose, onSaved, studentId
     try {
       await enrollmentService.create({
         student_id: studentId,
-        subject_code: form.subject_code,
+        subject_code: form.subject_code.trim().toUpperCase(),
+        subject_name: form.subject_name.trim() || null,
         semester: parseInt(form.semester),
-        school_year: form.school_year || null,
-        instructor: form.instructor || null,
+        school_year: form.school_year.trim() || null,
+        instructor: form.instructor.trim() || null,
         units: form.units ? parseFloat(form.units) : 3.0,
-        schedule: form.schedule || null,
+        schedule: form.schedule.trim() || null,
       })
       onSaved()
       onClose()
@@ -65,6 +68,14 @@ export default function AddEnrollmentModal({ isOpen, onClose, onSaved, studentId
           />
         </FormGroup>
 
+        <FormGroup label="Description" required>
+          <FormInput
+            value={form.subject_name}
+            onChange={(e) => set('subject_name', e.target.value)}
+            placeholder="e.g. Software Engineering"
+          />
+        </FormGroup>
+
         <FormGroup label="Units" required>
           <FormInput
             type="number"
@@ -79,7 +90,7 @@ export default function AddEnrollmentModal({ isOpen, onClose, onSaved, studentId
           <FormInput
             value={form.instructor}
             onChange={(e) => set('instructor', e.target.value)}
-            placeholder="e.g. C. Reotutar"
+            placeholder="e.g. C. De Leon"
           />
         </FormGroup>
 

@@ -47,7 +47,7 @@ export default function EditCurriculumModal({ isOpen, onClose, onSaved, entry })
                 year_level: parseInt(form.year_level),
                 semester: parseInt(form.semester),
                 subject_code: form.subject_code.trim().toUpperCase(),
-                subject_name: (form.subject_name || '').trim() || form.subject_code.trim().toUpperCase(),
+                subject_name: (form.subject_name || '').trim() || null,
                 units: parseInt(form.units) || 3,
             })
 
@@ -129,4 +129,3 @@ export default function EditCurriculumModal({ isOpen, onClose, onSaved, entry })
         </Modal>
     )
 }
-

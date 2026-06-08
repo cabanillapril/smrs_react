@@ -10,6 +10,7 @@ export default function AddGradeModal({ isOpen, onClose, onSaved, initialStudent
   const [form, setForm] = useState({
     student_id: '',
     subject_code: '',
+    subject_name: '',
     school_year: '2025-2026',
     midterm: '',
     finals: '',
@@ -55,7 +56,8 @@ export default function AddGradeModal({ isOpen, onClose, onSaved, initialStudent
       await gradeService.create({
         student_id: form.student_id,
         subject_code: form.subject_code,
-        semester: parseInt(form.semester),
+        subject_name: form.subject_name || null,
+        semester: form.semester,
         school_year: form.school_year,
         midterm_grade: form.midterm ? parseFloat(form.midterm) : null,
         final_grade: form.finals ? parseFloat(form.finals) : null,
@@ -64,6 +66,7 @@ export default function AddGradeModal({ isOpen, onClose, onSaved, initialStudent
       setForm({
         student_id: '',
         subject_code: '',
+        subject_name: '',
         school_year: '2025-2026',
         midterm: '',
         finals: '',
@@ -100,6 +103,9 @@ export default function AddGradeModal({ isOpen, onClose, onSaved, initialStudent
         </FormGroup>
         <FormGroup label="Subject Code" required>
           <FormInput value={form.subject_code} onChange={(e) => set('subject_code', e.target.value)} placeholder="e.g. MATH101" />
+        </FormGroup>
+        <FormGroup label="Subject Name">
+          <FormInput value={form.subject_name} onChange={(e) => set('subject_name', e.target.value)} placeholder="e.g. College Algebra" />
         </FormGroup>
         <FormGroup label="Instructor">
           <FormInput value={form.instructor} onChange={(e) => set('instructor', e.target.value)} placeholder="Instructor Name (Optional)" />

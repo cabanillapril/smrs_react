@@ -10,7 +10,7 @@ class Student(Base):
     first_name     = Column(String, nullable=False)
     middle_name    = Column(String, nullable=True)
     last_name      = Column(String, nullable=False)
-    birthday       = Column(String, nullable=True)   # stored as ISO date string
+    birthday       = Column(String, nullable=True)   
     gender         = Column(String, nullable=True)
     address        = Column(String, nullable=True)
     contact_number = Column(String, nullable=True)
@@ -20,10 +20,9 @@ class Student(Base):
     section        = Column(String, nullable=True)
     status         = Column(String, default="Regular")
     major          = Column(String, nullable=True)
+    adviser        = Column(String, nullable=True)
 
     # Cascading Relationships
-    # These ensure that when a Student is deleted, all related child records are also deleted.
-    # Note: This assumes child models (Grade, Deficiency, Enrollment) have a 'student' relationship.
     grades = relationship(
         "Grade", 
         back_populates="student", 
