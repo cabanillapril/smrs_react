@@ -91,7 +91,7 @@ def update_curriculum(
         db.commit()
         db.refresh(subject)
     else:
-        # Update subject details if provided
+        # Update subject details 
         if data.subject_name is not None:
             subject.subject_name = data.subject_name.strip()
         if data.units is not None:

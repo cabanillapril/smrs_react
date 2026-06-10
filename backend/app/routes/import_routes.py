@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text, or_
 import io, sqlalchemy
 import os
+import math
 import re
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
@@ -905,6 +906,8 @@ def parse_grade_token(token: str) -> Optional[float]:
     if not token: return None
     try:
         val = float(token)
+        # Snap to nearest 0.25 increment (1, 1.25, 1.5, 1.75, 2, etc.)
+        val = math.floor(val * 4 + 0.5) / 4
         # Validate range for college grades (typically 1.0 to 5.0)
         if 1.0 <= val <= 5.0:
             return val
@@ -1072,11 +1075,12 @@ def extract_subject_rows(text: str) -> List[dict]:
 
 def compute_final(midterm: Optional[float], finals: Optional[float]) -> Optional[float]:
     if midterm is not None and finals is not None:
-        return round((midterm + finals) / 2, 2)
+        avg = (midterm + finals) / 2
+        return math.floor(avg * 4 + 0.5) / 4
     if midterm is not None:
-        return midterm
+        return math.floor(midterm * 4 + 0.5) / 4
     if finals is not None:
-        return finals
+        return math.floor(finals * 4 + 0.5) / 4
     return None
 
 
@@ -1281,14 +1285,21 @@ def sync_enrollment_from_grade(db: Session, student_id: str, subject_id: int, se
             db.commit()
 
 
-def create_grade_record(db: Session, student_id: str, row: dict) -> Grade:
+def create_grade_record(db: Session, student_id: str, row: dict, overwrite: bool = False) -> Grade:
     subject = find_or_create_subject(
         db,
         row['subject_code'],
         row.get('subject_name'), # Pass None if missing to avoid triggering code-fallback updates
         row.get('units'),
     )
-    final_value = compute_final(row.get('midterm_grade'), row.get('final_grade'))
+
+    # Apply rounding to midterm and final grades from the input row to ensure they adhere to 0.25 increments
+    midterm_input = row.get('midterm_grade')
+    finals_input = row.get('final_grade')
+    rounded_midterm = math.floor(midterm_input * 4 + 0.5) / 4 if midterm_input is not None else None
+    rounded_finals = math.floor(finals_input * 4 + 0.5) / 4 if finals_input is not None else None
+
+    final_value = compute_final(rounded_midterm, rounded_finals)
     semester    = row.get('semester') or 1
     school_year = row.get('school_year')
     
@@ -1308,8 +1319,14 @@ def create_grade_record(db: Session, student_id: str, row: dict) -> Grade:
     units_val = float(row.get('units')) if row.get('units') is not None else None
 
     if existing:
-        existing.midterm    = row.get('midterm_grade')
-        existing.finals     = row.get('final_grade')
+        if not overwrite:
+            raise HTTPException(
+                status_code=409, 
+                detail=f"Grade already exists for student {student_id} in {row['subject_code']} for {school_year or 'N/A'} Sem {semester}."
+            )
+            
+        existing.midterm    = rounded_midterm
+        existing.finals     = rounded_finals
         existing.grade      = final_value if final_value is not None else 0.0
         existing.remarks    = final_remark
         existing.instructor = row.get('instructor')
@@ -1324,8 +1341,8 @@ def create_grade_record(db: Session, student_id: str, row: dict) -> Grade:
         subject_id  = subject.subject_id,
         semester    = semester,
         school_year = school_year,
-        midterm     = row.get('midterm_grade'),
-        finals      = row.get('final_grade'),
+        midterm     = rounded_midterm,
+        finals      = rounded_finals,
         grade       = final_value if final_value is not None else 0.0,
         remarks     = final_remark,
         instructor  = row.get('instructor'),
@@ -1559,7 +1576,11 @@ def import_grade_report(
     return result
 
 @router.post('/appraisal/commit')
-def commit_appraisal(data: AppraisalCommitIn, db: Session = Depends(get_db)):
+def commit_appraisal(
+    data: AppraisalCommitIn, 
+    overwrite: bool = False, 
+    db: Session = Depends(get_db)
+):
     """Saves edited appraisal data (student info and subjects) to the database."""
 
     s = data.student
@@ -1587,7 +1608,7 @@ def commit_appraisal(data: AppraisalCommitIn, db: Session = Depends(get_db)):
     count = 0
     for row in data.rows:
         row_dict = row.dict() if hasattr(row, 'dict') else row.model_dump()
-        create_grade_record(db, student.student_id, row_dict)
+        create_grade_record(db, student.student_id, row_dict, overwrite=overwrite)
         count += 1
         
     log = ImportLog(
@@ -1607,7 +1628,11 @@ def commit_appraisal(data: AppraisalCommitIn, db: Session = Depends(get_db)):
     }
 
 @router.post('/grade-report/commit')
-def commit_grade_report(data: GradeReportCommitIn, db: Session = Depends(get_db)):
+def commit_grade_report(
+    data: GradeReportCommitIn, 
+    overwrite: bool = False, 
+    db: Session = Depends(get_db)
+):
     """Saves edited grade report data to the database."""
 
     # ── Field Validation ─────────────────────────────────────────────────────
@@ -1670,7 +1695,7 @@ def commit_grade_report(data: GradeReportCommitIn, db: Session = Depends(get_db)
             'school_year': sy,
             'instructor': data.metadata.instructor
         }
-        create_grade_record(db, student_obj.student_id, grade_row)
+        create_grade_record(db, student_obj.student_id, grade_row, overwrite=overwrite)
         count += 1
         
     log = ImportLog(
@@ -1926,7 +1951,11 @@ class CORCommitIn(BaseModel):
 
 
 @router.post('/cor/commit')
-def commit_cor(data: CORCommitIn, db: Session = Depends(get_db)):
+def commit_cor(
+    data: CORCommitIn, 
+    overwrite: bool = False, 
+    db: Session = Depends(get_db)
+):
     """Persist COR data: update/create student, upsert subjects, create enrollment records."""
     s = data.student
 

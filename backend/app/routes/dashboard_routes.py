@@ -14,7 +14,7 @@ def get_stats(db: Session = Depends(get_db)):
     total_deficiencies  = db.query(func.count(Deficiency.deficiency_id)).scalar() or 0
     pending_deficiencies= db.query(func.count(Deficiency.deficiency_id)).filter(Deficiency.status == "pending").scalar() or 0
     resolved_count      = db.query(func.count(Deficiency.deficiency_id)).filter(Deficiency.status == "resolved").scalar() or 0
-    # Deficiency model has no `reason` column; use `type` instead.
+    # Deficiency model 
     incomplete_count    = db.query(func.count(Deficiency.deficiency_id)).filter(
         Deficiency.type.ilike("%incomplete%"), Deficiency.status == "pending"
     ).scalar() or 0

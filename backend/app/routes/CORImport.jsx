@@ -5,8 +5,6 @@ import { importService } from '../services/api';
 
 /**
  * COR Import Page
- * - Natural text preview (no boxes until clicked)
- * - Auto-opens Student Modal after successful commit
  */
 export default function CORImport({ onOpenStudentEdit }) {
     const toast = useToasts();
@@ -26,7 +24,7 @@ export default function CORImport({ onOpenStudentEdit }) {
         setIsProcessing(true);
         setStatusMsg("Scanning document...");
         try {
-            // Assuming your api service has a previewCor method
+
             const data = await importService.previewCor(file);
             setPreviewData(data);
         } catch (err) {
@@ -44,12 +42,12 @@ export default function CORImport({ onOpenStudentEdit }) {
         try {
             const res = await importService.commitCorData(previewData);
 
-            // More robust data extraction for triggering the modal
+
             const studentData = res?.student || res?.data?.student || res?.data?.created_student;
 
             toast("COR Data saved successfully!", "success");
 
-            // CRUCIAL: Trigger the student modal to add additional info
+
             if (onOpenStudentEdit && studentData) {
                 onOpenStudentEdit(studentData);
             }

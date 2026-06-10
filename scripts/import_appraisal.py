@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import math
 import sys
 from dataclasses import dataclass
 from typing import List, Optional
@@ -333,7 +334,9 @@ def try_int(value: str) -> Optional[int]:
 
 def try_float(value: str) -> Optional[float]:
     try:
-        return float(value)
+        f = float(value)
+        return round(f * 4) / 4
+        return math.floor(f * 4 + 0.5) / 4
     except Exception:
         return None
 

@@ -34,7 +34,10 @@ def update(db: Session, grade_id: int, data: GradeUpdate):
     if not grade:
         return None
     # Exclude non-model fields before updating attributes
-    update_data = data.model_dump(exclude_unset=True, exclude={'subject_code', 'subject_name'})
+    if hasattr(data, "model_dump"):
+        update_data = data.model_dump(exclude_unset=True, exclude={'subject_code', 'subject_name'})
+    else:
+        update_data = {k: v for k, v in data.items() if k not in {'subject_code', 'subject_name'}}
     for k, v in update_data.items():
         setattr(grade, k, v)
     db.commit()

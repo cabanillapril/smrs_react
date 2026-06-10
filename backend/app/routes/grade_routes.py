@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
+import math
 from pydantic import BaseModel
 from ..database.db import get_db
 from ..repository import grade_repo
@@ -27,11 +28,12 @@ class GradeIn(BaseModel):
 
 def _compute_final(midterm: Optional[float], finals: Optional[float]) -> Optional[float]:
     if midterm is not None and finals is not None:
-        return round((midterm + finals) / 2, 2)
+        avg = (midterm + finals) / 2
+        return math.floor(avg * 4 + 0.5) / 4
     if midterm is not None:
-        return midterm
+        return math.floor(midterm * 4 + 0.5) / 4
     if finals is not None:
-        return finals
+        return math.floor(finals * 4 + 0.5) / 4
     return None
 
 
@@ -99,15 +101,19 @@ def create_grade(data: GradeIn, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(subject)
 
-    final = _compute_final(data.midterm_grade, data.final_grade)
+    # Apply rounding to inputs to ensure they adhere to 0.25 increments
+    mid = math.floor(data.midterm_grade * 4 + 0.5) / 4 if data.midterm_grade is not None else None
+    fin = math.floor(data.final_grade * 4 + 0.5) / 4 if data.final_grade is not None else None
+
+    final = _compute_final(mid, fin)
 
     entry = Grade(
         student_id=data.student_id,
         subject_id=subject.subject_id,
         semester=int(data.semester) if data.semester else 1,
         school_year=data.school_year,
-        midterm=data.midterm_grade,
-        finals=data.final_grade,
+        midterm=mid,
+        finals=fin,
         grade=final if final is not None else 0.0,
         remarks=_remarks(final),
         instructor=data.instructor,
@@ -125,6 +131,21 @@ def update_grade(grade_id: int, data: GradeUpdate, db: Session = Depends(get_db)
     grade_obj = db.query(Grade).filter(Grade.grade_id == grade_id).first()
     if not grade_obj:
         raise HTTPException(status_code=404, detail="Grade not found")
+
+    # Prepare the update dictionary
+    update_dict = data.model_dump(exclude_unset=True)
+
+    # Normalize input field names (handle both 'midterm' and 'midterm_grade')
+    raw_mid = update_dict.get("midterm_grade") if update_dict.get("midterm_grade") is not None else update_dict.get("midterm")
+    raw_fin = update_dict.get("final_grade") if update_dict.get("final_grade") is not None else update_dict.get("finals")
+
+    # Apply rounding to the identified inputs
+    rounded_mid = math.floor(raw_mid * 4 + 0.5) / 4 if raw_mid is not None else grade_obj.midterm
+    rounded_fin = math.floor(raw_fin * 4 + 0.5) / 4 if raw_fin is not None else grade_obj.finals
+
+    # Explicitly recalculate the final average and remarks
+    computed_grade = _compute_final(rounded_mid, rounded_fin) or 0.0
+    computed_remarks = _remarks(computed_grade)
 
     # Handle Subject Code/Name updates
     target_subject_id = grade_obj.subject_id
@@ -147,13 +168,32 @@ def update_grade(grade_id: int, data: GradeUpdate, db: Session = Depends(get_db)
         if subject:
             subject.subject_name = data.subject_name.strip()
             db.commit()
+    else:
+        # Ensure 'subject' is defined for the sync_enrollment_from_grade call
+        # if subject_code/name were not updated.
+        subject = db.query(Subject).filter(Subject.subject_id == target_subject_id).first()
 
     grade_obj.subject_id = target_subject_id
 
-    grade = grade_repo.update(db, grade_id, data)
-    sync_deficiency_from_grade(db, grade["student_id"], grade["subject_id"], grade["semester"], grade["remarks"], grade["school_year"])
-    sync_enrollment_from_grade(db, grade["student_id"], grade["subject_id"], grade["semester"], grade["school_year"], grade["instructor"], float(grade["unit"]) if grade.get("unit") is not None else 3.0)
-    return grade
+    # Build clean update dictionary for the model
+    final_update = {
+        "midterm": rounded_mid,
+        "finals": rounded_fin,
+        "grade": computed_grade,
+        "remarks": computed_remarks,
+    }
+    
+    if "instructor" in update_dict:
+        final_update["instructor"] = update_dict["instructor"]
+    if "school_year" in update_dict:
+        final_update["school_year"] = update_dict["school_year"]
+    if "semester" in update_dict and update_dict["semester"] is not None:
+        final_update["semester"] = int(update_dict["semester"])
+
+    updated_grade_obj = grade_repo.update(db, grade_id, GradeUpdate(**final_update))
+    sync_deficiency_from_grade(db, updated_grade_obj.get("student_id"), updated_grade_obj.get("subject_id"), updated_grade_obj.get("semester"), updated_grade_obj.get("remarks"), updated_grade_obj.get("school_year"))
+    sync_enrollment_from_grade(db, updated_grade_obj.get("student_id"), updated_grade_obj.get("subject_id"), updated_grade_obj.get("semester"), updated_grade_obj.get("school_year"), updated_grade_obj.get("instructor"), float(subject.unit) if subject.unit is not None else 3.0)
+    return updated_grade_obj
 
 
 @router.delete("/{grade_id}", status_code=204)

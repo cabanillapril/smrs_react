@@ -56,7 +56,7 @@ if "%NEED_BUILD%"=="1" (
     echo     API URL changed — rebuilding frontend now...
     cd frontend
     call npm run build
-    if %ERRORLEVEL% neq 0 (
+    if !ERRORLEVEL! neq 0 (
         echo [ERROR] Build failed. Make sure Node.js is installed and run 'npm install' in the frontend folder.
         cd ..
         pause

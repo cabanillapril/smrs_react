@@ -66,9 +66,9 @@ export default function LoginPage({ onLogin }) {
           </button>
         </form>
 
-        <p style={{ marginTop: 24, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+        {/* <p style={{ marginTop: 24, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
           Default: <b>admin</b> / <b>admin123</b>
-        </p>
+        </p> */}
       </div>
     </div>
   )
