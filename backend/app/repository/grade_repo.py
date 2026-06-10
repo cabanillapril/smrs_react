@@ -9,25 +9,30 @@ def _enrich(grade: Grade, db: Session) -> dict:
     student = db.query(Student).filter(Student.student_id == grade.student_id).first()
     subject = db.query(Subject).filter(Subject.subject_id == grade.subject_id).first()
     d["student_name"] = f"{student.last_name}, {student.first_name}" if student else None
+    d["student_id"] = student.student_id if student else None
     d["subject_code"] = subject.subject_code if subject else None
     d["subject_name"] = subject.subject_name if subject else None
-    d["unit"]         = subject.unit if subject else None
+    d["unit"] = subject.unit if subject else None
+    # Frontend-friendly aliases required by GradeOut schema
+    d["midterm_grade"] = grade.midterm
+    d["final_grade"] = grade.finals
+    d["computed_final_grade"] = grade.grade
     return d
 
 def get_all(db: Session):
     grades = db.query(Grade).all()
-    return [_enrich(g, db) for g in grades]
+    return grades
 
 def get_by_student(db: Session, student_id: str):
     grades = db.query(Grade).filter(Grade.student_id == student_id).all()
-    return [_enrich(g, db) for g in grades]
+    return grades
 
 def create(db: Session, data: GradeCreate):
     grade = Grade(**data.model_dump())
     db.add(grade)
     db.commit()
     db.refresh(grade)
-    return _enrich(grade, db)
+    return grade
 
 def update(db: Session, grade_id: int, data: GradeUpdate):
     grade = db.query(Grade).filter(Grade.grade_id == grade_id).first()
@@ -42,7 +47,7 @@ def update(db: Session, grade_id: int, data: GradeUpdate):
         setattr(grade, k, v)
     db.commit()
     db.refresh(grade)
-    return _enrich(grade, db)
+    return grade
 
 def delete(db: Session, grade_id: int):
     grade = db.query(Grade).filter(Grade.grade_id == grade_id).first()

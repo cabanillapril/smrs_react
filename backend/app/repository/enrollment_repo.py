@@ -1,7 +1,10 @@
 from sqlalchemy.orm import Session
 from datetime import date
+
 from ..models.enrollment_model import Enrollment
 from ..models.subjects_model import Subject
+from ..models.students_model import Student
+
 from ..schemas.enrollment_schema import EnrollmentCreate, EnrollmentUpdate
 
 def _enrich(enrollment: Enrollment, db: Session) -> dict:
@@ -35,7 +38,7 @@ def create(db: Session, data: EnrollmentCreate):
         subject = Subject(
             subject_code=code,
             subject_name=data.subject_name.strip() if data.subject_name else code,
-            unit=int(data.units) if data.units else 3
+            unit=int(data.units) if data.units is not None else 3
         )
         db.add(subject)
         db.commit()

@@ -2,12 +2,13 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 from sqlalchemy import text, or_
 import io, sqlalchemy
+from ..database.db import get_db
 import os
 import math
 import re
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from pydantic import BaseModel
-from ..database.db import get_db
+from sqlalchemy import func
 from ..models.students_model import Student
 from ..models.subjects_model import Subject
 from ..models.grade_model import Grade
@@ -17,6 +18,7 @@ from ..models.enrollment_model import Enrollment
 from ..schemas.student_schema import StudentCreate
 from ..repository import student_repo
 from datetime import date, datetime
+from .subject_utils import check_subject_conflict
 
 try:
     from PIL import Image
@@ -1176,23 +1178,45 @@ def create_or_find_student(db: Session, student_data: dict) -> Student:
     return student_repo.create(db, schema)
 
 
-def find_or_create_subject(db: Session, subject_code: str, subject_name: Optional[str], units: Optional[int]) -> Subject:
+def find_or_create_subject(
+    db: Session,
+    subject_code: str,
+    subject_name: Optional[str],
+    units: Optional[int],
+    keep_subject: bool = False,
+    overwrite_subject: bool = False
+) -> Subject:
     code = subject_code.strip().upper()
     if not code:
         raise ValueError('Subject code is required')
-    subject = db.query(Subject).filter(Subject.subject_code == code).first()
+    
+    # Conflict check
+    skip_update, subject = check_subject_conflict(
+        db,
+        subject_code=code,
+        subject_name=subject_name,
+        units=units,
+        keep_subject=keep_subject,
+        overwrite_subject=overwrite_subject
+    )
     
     if subject:
-        # Update existing subject name if the provided one is more descriptive
-        if subject_name and subject_name.strip():
-            candidate_name = subject_name.strip()
-            existing_name = (subject.subject_name or "").strip()            
-            
-            # Update if current name is empty OR is identical to the code 
-            # AND the new candidate name is actually a real description (not just the code again)
-            if (not existing_name or existing_name.upper() == code) and candidate_name.upper() != code:
-                subject.subject_name = candidate_name
-                db.commit()
+        if not skip_update:
+            if subject_name and subject_name.strip():
+                candidate_name = subject_name.strip()
+                existing_name = (subject.subject_name or "").strip()            
+                
+                if overwrite_subject:
+                    subject.subject_name = candidate_name
+                    if units is not None:
+                        subject.unit = units
+                    db.commit()
+                else:
+                    # Update if current name is empty OR is identical to the code 
+                    # AND the new candidate name is actually a real description (not just the code again)
+                    if (not existing_name or existing_name.upper() == code) and candidate_name.upper() != code:
+                        subject.subject_name = candidate_name
+                        db.commit()
         return subject
 
     # Creation path: Only fallback to code if subject_name is None or empty string
@@ -1285,12 +1309,21 @@ def sync_enrollment_from_grade(db: Session, student_id: str, subject_id: int, se
             db.commit()
 
 
-def create_grade_record(db: Session, student_id: str, row: dict, overwrite: bool = False) -> Grade:
+def create_grade_record(
+    db: Session,
+    student_id: str,
+    row: dict,
+    overwrite: bool = False,
+    keep_subject: bool = False,
+    overwrite_subject: bool = False
+) -> Grade:
     subject = find_or_create_subject(
         db,
         row['subject_code'],
         row.get('subject_name'), # Pass None if missing to avoid triggering code-fallback updates
         row.get('units'),
+        keep_subject=keep_subject,
+        overwrite_subject=overwrite_subject
     )
 
     # Apply rounding to midterm and final grades from the input row to ensure they adhere to 0.25 increments
@@ -1310,10 +1343,10 @@ def create_grade_record(db: Session, student_id: str, row: dict, overwrite: bool
     # Upsert: if a grade already exists for this student + subject + semester,
     # overwrite it with the fresh data instead of inserting a duplicate.
     existing = db.query(Grade).filter(
-        Grade.student_id  == student_id,
-        Grade.subject_id  == subject.subject_id,
-        Grade.semester    == semester,
-        Grade.school_year == school_year,
+        func.trim(Grade.student_id) == student_id.strip(),
+        Grade.subject_id == subject.subject_id,
+        Grade.semester == semester,
+        func.trim(Grade.school_year) == (school_year.strip() if school_year else "")
     ).first()
 
     units_val = float(row.get('units')) if row.get('units') is not None else None
@@ -1579,6 +1612,8 @@ def import_grade_report(
 def commit_appraisal(
     data: AppraisalCommitIn, 
     overwrite: bool = False, 
+    keep_subject: bool = False,
+    overwrite_subject: bool = False,
     db: Session = Depends(get_db)
 ):
     """Saves edited appraisal data (student info and subjects) to the database."""
@@ -1608,7 +1643,14 @@ def commit_appraisal(
     count = 0
     for row in data.rows:
         row_dict = row.dict() if hasattr(row, 'dict') else row.model_dump()
-        create_grade_record(db, student.student_id, row_dict, overwrite=overwrite)
+        create_grade_record(
+            db,
+            student.student_id,
+            row_dict,
+            overwrite=overwrite,
+            keep_subject=keep_subject,
+            overwrite_subject=overwrite_subject
+        )
         count += 1
         
     log = ImportLog(
@@ -1631,6 +1673,8 @@ def commit_appraisal(
 def commit_grade_report(
     data: GradeReportCommitIn, 
     overwrite: bool = False, 
+    keep_subject: bool = False,
+    overwrite_subject: bool = False,
     db: Session = Depends(get_db)
 ):
     """Saves edited grade report data to the database."""
@@ -1664,6 +1708,8 @@ def commit_grade_report(
         m.subject_code or 'UNKNOWN',
         m.subject_description,
         None,
+        keep_subject=keep_subject,
+        overwrite_subject=overwrite_subject
     )
 
     sem = m.semester or 1
@@ -1695,7 +1741,14 @@ def commit_grade_report(
             'school_year': sy,
             'instructor': data.metadata.instructor
         }
-        create_grade_record(db, student_obj.student_id, grade_row, overwrite=overwrite)
+        create_grade_record(
+            db,
+            student_obj.student_id,
+            grade_row,
+            overwrite=overwrite,
+            keep_subject=keep_subject,
+            overwrite_subject=overwrite_subject
+        )
         count += 1
         
     log = ImportLog(

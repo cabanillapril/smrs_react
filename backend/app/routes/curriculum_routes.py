@@ -7,6 +7,7 @@ from ..repository import curriculum_repo, subject_repo
 from ..schemas.curriculum_schema import CurriculumOut
 from ..models.curriculum_model import Curriculum
 from ..models.subjects_model import Subject
+from .subject_utils import check_subject_conflict
 
 router = APIRouter()
 
@@ -33,11 +34,25 @@ def get_curriculum(
 
 
 @router.post("/", response_model=CurriculumOut, status_code=201)
-def add_to_curriculum(data: CurriculumIn, db: Session = Depends(get_db)):
+def add_to_curriculum(
+    data: CurriculumIn, 
+    keep_subject: bool = False,
+    overwrite_subject: bool = False,
+    db: Session = Depends(get_db)
+):
     code = data.subject_code.strip().upper()
 
+    # Conflict check
+    skip_update, subject = check_subject_conflict(
+        db,
+        subject_code=code,
+        subject_name=data.subject_name,
+        units=data.units,
+        keep_subject=keep_subject,
+        overwrite_subject=overwrite_subject
+    )
+
     # Find or create subject
-    subject = db.query(Subject).filter(Subject.subject_code == code).first()
     if not subject:
         subject = Subject(
             subject_code=code,
@@ -47,6 +62,15 @@ def add_to_curriculum(data: CurriculumIn, db: Session = Depends(get_db)):
             major=data.major,
         )
         db.add(subject)
+        db.commit()
+        db.refresh(subject)
+    elif not skip_update:
+        if data.subject_name is not None:
+            subject.subject_name = data.subject_name.strip()
+        if data.units is not None:
+            subject.unit = data.units
+        subject.course = data.course
+        subject.major = data.major
         db.commit()
         db.refresh(subject)
 
@@ -68,6 +92,8 @@ def add_to_curriculum(data: CurriculumIn, db: Session = Depends(get_db)):
 def update_curriculum(
     curriculum_id: int,
     data: CurriculumIn,
+    keep_subject: bool = False,
+    overwrite_subject: bool = False,
     db: Session = Depends(get_db),
 ):
     # Load entry
@@ -77,8 +103,17 @@ def update_curriculum(
 
     code = data.subject_code.strip().upper()
 
+    # Conflict check
+    skip_update, subject = check_subject_conflict(
+        db,
+        subject_code=code,
+        subject_name=data.subject_name,
+        units=data.units,
+        keep_subject=keep_subject,
+        overwrite_subject=overwrite_subject
+    )
+
     # Find or create/update subject
-    subject = db.query(Subject).filter(Subject.subject_code == code).first()
     if not subject:
         subject = Subject(
             subject_code=code,
@@ -90,7 +125,7 @@ def update_curriculum(
         db.add(subject)
         db.commit()
         db.refresh(subject)
-    else:
+    elif not skip_update:
         # Update subject details 
         if data.subject_name is not None:
             subject.subject_name = data.subject_name.strip()

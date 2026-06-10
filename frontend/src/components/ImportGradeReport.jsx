@@ -204,8 +204,9 @@ export default function ImportGradeReport({ onActivity }) {
         return missing;
     }
 
-    async function commitImport() {
-        if (!preview) return
+    async function commitImport(keepSubject = false, overwriteSubject = false, customPreview = null) {
+        const activePreview = customPreview || preview;
+        if (!activePreview) return
 
         const missingFields = validateGradeReportForm();
         if (missingFields.length > 0) {
@@ -216,11 +217,39 @@ export default function ImportGradeReport({ onActivity }) {
         setLoading(true)
         setError('')
         try {
-            const data = await importService.commitGradeReportData(preview)
-            setResult({ commit: true, created_grades: data.created_grades, metadata: preview.metadata })
+            const data = await importService.commitGradeReportData(activePreview, keepSubject, overwriteSubject)
+            setResult({ commit: true, created_grades: data.created_grades, metadata: activePreview.metadata })
             setStep('done')
-            onActivity?.(`Imported Grade Report: <b>${preview?.metadata?.subject_code || 'subject'}</b> — ${data.created_grades ?? 0} grade(s) added`, 'blue')
+            onActivity?.(`Imported Grade Report: <b>${activePreview?.metadata?.subject_code || 'subject'}</b> — ${data.created_grades ?? 0} grade(s) added`, 'blue')
         } catch (err) {
+            let conflictData = null
+            try {
+                const parsed = JSON.parse(err.message)
+                if (parsed && parsed.type === 'SUBJECT_CONFLICT') {
+                    conflictData = parsed
+                }
+            } catch (e) {}
+
+            if (conflictData) {
+                const msg = `Subject code "${conflictData.subject_code}" already exists in the system as "${conflictData.existing.subject_name}" (${conflictData.existing.unit} units).\n\n` +
+                            `Do you want to update the system to use the new name "${conflictData.incoming.subject_name}"?\n\n` +
+                            `OK/Yes → Apply new details\nCancel/No → Keep existing details`
+                const overwrite = window.confirm(msg)
+                if (overwrite) {
+                    commitImport(false, true, activePreview)
+                } else {
+                    const updatedPreview = {
+                        ...activePreview,
+                        metadata: {
+                            ...activePreview.metadata,
+                            subject_description: conflictData.existing.subject_name
+                        }
+                    }
+                    setPreview(updatedPreview)
+                    commitImport(false, false, updatedPreview)
+                }
+                return
+            }
             setError(err.message || 'Failed to import Grade Report')
         } finally {
             setLoading(false)

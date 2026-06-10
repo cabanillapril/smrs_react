@@ -54,6 +54,38 @@ export default function EditCurriculumModal({ isOpen, onClose, onSaved, entry })
             onSaved?.()
             onClose()
         } catch (err) {
+            let conflictData = null
+            try {
+                const parsed = JSON.parse(err.message)
+                if (parsed && parsed.type === 'SUBJECT_CONFLICT') {
+                    conflictData = parsed
+                }
+            } catch (e) {}
+
+            if (conflictData) {
+                const msg = `Subject code "${conflictData.subject_code}" already exists in the system as "${conflictData.existing.subject_name}" (${conflictData.existing.unit} units).\n\n` +
+                            `Do you want to update the system to use the new name "${conflictData.incoming.subject_name}" (${conflictData.incoming.unit} units)?\n\n` +
+                            `OK/Yes → Apply new details\nCancel/No → Keep existing details`
+                const overwrite = window.confirm(msg)
+                
+                try {
+                    await curriculumService.update(entry.curriculum_id, {
+                        course: form.course,
+                        major: form.major || null,
+                        year_level: parseInt(form.year_level),
+                        semester: parseInt(form.semester),
+                        subject_code: form.subject_code.trim().toUpperCase(),
+                        subject_name: (form.subject_name || '').trim() || null,
+                        units: parseInt(form.units) || 3,
+                    }, !overwrite, overwrite)
+
+                    onSaved?.()
+                    onClose()
+                } catch (retryErr) {
+                    alert(retryErr.message || 'Failed to update curriculum.')
+                }
+                return
+            }
             alert(err.message || 'Failed to update curriculum.')
         }
     }

@@ -18,7 +18,10 @@ def create(db: Session, grade: GradeCreate):
 def update(db: Session, grade_id: int, grade_data: dict):
     db_grade = db.query(Grade).filter(Grade.grade_id == grade_id).first()
     if db_grade:
-        for key, value in grade_data.items():
+        # Handle both dict and Pydantic models
+        data_dict = grade_data if isinstance(grade_data, dict) else grade_data.model_dump(exclude_unset=True)
+        
+        for key, value in data_dict.items():
             # Exclude fields that are not directly part of the Grade model or are handled separately
             if key in ["subject_code", "subject_name", "student_id", "student_name", "unit", "computed_final_grade"]:
                 continue

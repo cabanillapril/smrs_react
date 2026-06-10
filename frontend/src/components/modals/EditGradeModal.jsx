@@ -51,6 +51,40 @@ export default function EditGradeModal({ isOpen, onClose, onSaved, grade }) {
       onSaved?.()
       onClose()
     } catch (err) {
+      let conflictData = null
+      try {
+        const parsed = JSON.parse(err.message)
+        if (parsed && parsed.type === 'SUBJECT_CONFLICT') {
+          conflictData = parsed
+        }
+      } catch (e) {}
+
+      if (conflictData) {
+        const msg = `Subject code "${conflictData.subject_code}" already exists in the system as "${conflictData.existing.subject_name}" (${conflictData.existing.unit} units).\n\n` +
+                    `Do you want to update the system to use the new name "${conflictData.incoming.subject_name}"?\n\n` +
+                    `OK/Yes → Apply new details\nCancel/No → Keep existing details`
+        const overwrite = window.confirm(msg)
+        
+        setLoading(true)
+        try {
+          await gradeService.update(grade.grade_id, {
+            subject_code: form.subject_code,
+            subject_name: form.subject_name || null,
+            instructor: form.instructor || null,
+            midterm: form.midterm !== '' ? parseFloat(form.midterm) : null,
+            finals: form.finals !== '' ? parseFloat(form.finals) : null,
+            semester: parseInt(form.semester),
+            school_year: form.school_year || null,
+          }, !overwrite, overwrite)
+          onSaved?.()
+          onClose()
+        } catch (retryErr) {
+          alert(retryErr.message)
+        } finally {
+          setLoading(false)
+        }
+        return
+      }
       alert(err.message)
     } finally {
       setLoading(false)

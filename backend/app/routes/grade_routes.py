@@ -10,6 +10,7 @@ from ..models.grade_model import Grade
 from ..models.subjects_model import Subject
 from ..models.students_model import Student
 from .import_routes import sync_deficiency_from_grade, sync_enrollment_from_grade
+from .subject_utils import check_subject_conflict
 
 router = APIRouter()
 
@@ -61,16 +62,24 @@ def _enrich(g: Grade, db: Session) -> dict:
 
 @router.get("/", response_model=List[GradeOut])
 def list_grades(db: Session = Depends(get_db)):
-    return grade_repo.get_all(db)
+    grades = grade_repo.get_all(db)
+    return [_enrich(g, db) for g in grades]
 
 
 @router.get("/student/{student_id}", response_model=List[GradeOut])
 def get_grades_by_student(student_id: str, db: Session = Depends(get_db)):
-    return grade_repo.get_by_student(db, student_id)
+    grades = grade_repo.get_by_student(db, student_id)
+    return [_enrich(g, db) for g in grades]
 
 
 @router.post("/", response_model=GradeOut, status_code=201)
-def create_grade(data: GradeIn, db: Session = Depends(get_db)):
+def create_grade(
+    data: GradeIn, 
+    overwrite: bool = False, 
+    keep_subject: bool = False,
+    overwrite_subject: bool = False,
+    db: Session = Depends(get_db)
+):
     # Verify student exists
     student_obj = db.query(Student).filter(
         (Student.student_id == data.student_id) | (Student.student_number == data.student_id)
@@ -85,8 +94,16 @@ def create_grade(data: GradeIn, db: Session = Depends(get_db)):
 
     code = data.subject_code.strip().upper()
 
+    # Conflict check
+    skip_update, subject = check_subject_conflict(
+        db,
+        subject_code=code,
+        subject_name=data.subject_name,
+        keep_subject=keep_subject,
+        overwrite_subject=overwrite_subject
+    )
+
     # Find or create subject
-    subject = db.query(Subject).filter(Subject.subject_code == code).first()
     if not subject:
         subject = Subject(
             subject_code=code,
@@ -94,8 +111,8 @@ def create_grade(data: GradeIn, db: Session = Depends(get_db)):
             unit=3,
         )
         db.add(subject)
-    elif data.subject_name and data.subject_name.strip():
-        # Always update name if the user provided one
+    elif not skip_update and data.subject_name and data.subject_name.strip():
+        # Update name if allowed
         subject.subject_name = data.subject_name.strip()
     
     db.commit()
@@ -106,28 +123,61 @@ def create_grade(data: GradeIn, db: Session = Depends(get_db)):
     fin = math.floor(data.final_grade * 4 + 0.5) / 4 if data.final_grade is not None else None
 
     final = _compute_final(mid, fin)
+    sem_val = int(data.semester) if data.semester else 1
 
-    entry = Grade(
-        student_id=data.student_id,
-        subject_id=subject.subject_id,
-        semester=int(data.semester) if data.semester else 1,
-        school_year=data.school_year,
-        midterm=mid,
-        finals=fin,
-        grade=final if final is not None else 0.0,
-        remarks=_remarks(final),
-        instructor=data.instructor,
-    )
-    db.add(entry)
-    db.commit()
-    db.refresh(entry)
+    # Check for existing record to support "Replace" logic
+    existing = db.query(Grade).filter(
+        Grade.student_id == data.student_id,
+        Grade.subject_id == subject.subject_id,
+        Grade.semester == sem_val,
+        Grade.school_year == data.school_year
+    ).first()
+
+    if existing:
+        if not overwrite:
+            raise HTTPException(
+                status_code=409, 
+                detail="Grade record already exists for this student, subject, and period. Replace existing record?"
+            )
+        
+        # Update existing record (Replace)
+        existing.midterm = mid
+        existing.finals = fin
+        existing.grade = final if final is not None else 0.0
+        existing.remarks = _remarks(final)
+        existing.instructor = data.instructor
+        db.commit()
+        db.refresh(existing)
+        entry = existing
+    else:
+        entry = Grade(
+            student_id=data.student_id,
+            subject_id=subject.subject_id,
+            semester=sem_val,
+            school_year=data.school_year,
+            midterm=mid,
+            finals=fin,
+            grade=final if final is not None else 0.0,
+            remarks=_remarks(final),
+            instructor=data.instructor,
+        )
+        db.add(entry)
+        db.commit()
+        db.refresh(entry)
+
     sync_deficiency_from_grade(db, entry.student_id, entry.subject_id, entry.semester, entry.remarks, entry.school_year)
     sync_enrollment_from_grade(db, entry.student_id, entry.subject_id, entry.semester, entry.school_year, entry.instructor, float(subject.unit) if subject.unit is not None else 3.0)
     return _enrich(entry, db)
 
 
 @router.put("/{grade_id}", response_model=GradeOut)
-def update_grade(grade_id: int, data: GradeUpdate, db: Session = Depends(get_db)):
+def update_grade(
+    grade_id: int, 
+    data: GradeUpdate, 
+    keep_subject: bool = False,
+    overwrite_subject: bool = False,
+    db: Session = Depends(get_db)
+):
     grade_obj = db.query(Grade).filter(Grade.grade_id == grade_id).first()
     if not grade_obj:
         raise HTTPException(status_code=404, detail="Grade not found")
@@ -151,7 +201,16 @@ def update_grade(grade_id: int, data: GradeUpdate, db: Session = Depends(get_db)
     target_subject_id = grade_obj.subject_id
     if data.subject_code:
         code = data.subject_code.strip().upper()
-        subject = db.query(Subject).filter(Subject.subject_code == code).first()
+        
+        # Conflict check
+        skip_update, subject = check_subject_conflict(
+            db,
+            subject_code=code,
+            subject_name=data.subject_name,
+            keep_subject=keep_subject,
+            overwrite_subject=overwrite_subject
+        )
+        
         if not subject:
             subject = Subject(
                 subject_code=code,
@@ -159,6 +218,8 @@ def update_grade(grade_id: int, data: GradeUpdate, db: Session = Depends(get_db)
                 unit=3,
             )
             db.add(subject)
+        elif not skip_update and data.subject_name and data.subject_name.strip():
+            subject.subject_name = data.subject_name.strip()
         db.commit()
         db.refresh(subject)
         target_subject_id = subject.subject_id
@@ -166,8 +227,16 @@ def update_grade(grade_id: int, data: GradeUpdate, db: Session = Depends(get_db)
     if data.subject_name and data.subject_name.strip():
         subject = db.query(Subject).filter(Subject.subject_id == target_subject_id).first()
         if subject:
-            subject.subject_name = data.subject_name.strip()
-            db.commit()
+            skip_update, _ = check_subject_conflict(
+                db,
+                subject_code=subject.subject_code,
+                subject_name=data.subject_name,
+                keep_subject=keep_subject,
+                overwrite_subject=overwrite_subject
+            )
+            if not skip_update:
+                subject.subject_name = data.subject_name.strip()
+                db.commit()
     else:
         # Ensure 'subject' is defined for the sync_enrollment_from_grade call
         # if subject_code/name were not updated.
@@ -190,10 +259,12 @@ def update_grade(grade_id: int, data: GradeUpdate, db: Session = Depends(get_db)
     if "semester" in update_dict and update_dict["semester"] is not None:
         final_update["semester"] = int(update_dict["semester"])
 
-    updated_grade_obj = grade_repo.update(db, grade_id, GradeUpdate(**final_update))
-    sync_deficiency_from_grade(db, updated_grade_obj.get("student_id"), updated_grade_obj.get("subject_id"), updated_grade_obj.get("semester"), updated_grade_obj.get("remarks"), updated_grade_obj.get("school_year"))
-    sync_enrollment_from_grade(db, updated_grade_obj.get("student_id"), updated_grade_obj.get("subject_id"), updated_grade_obj.get("semester"), updated_grade_obj.get("school_year"), updated_grade_obj.get("instructor"), float(subject.unit) if subject.unit is not None else 3.0)
-    return updated_grade_obj
+    # Pass dictionary directly to repository, and use dot notation for attribute access
+    updated_grade_obj = grade_repo.update(db, grade_id, final_update)
+    
+    sync_deficiency_from_grade(db, updated_grade_obj.student_id, updated_grade_obj.subject_id, updated_grade_obj.semester, updated_grade_obj.remarks, updated_grade_obj.school_year)
+    sync_enrollment_from_grade(db, updated_grade_obj.student_id, updated_grade_obj.subject_id, updated_grade_obj.semester, updated_grade_obj.school_year, updated_grade_obj.instructor, float(subject.unit) if subject.unit is not None else 3.0)
+    return _enrich(updated_grade_obj, db)
 
 
 @router.delete("/{grade_id}", status_code=204)

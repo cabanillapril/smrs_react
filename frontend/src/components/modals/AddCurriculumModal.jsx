@@ -20,14 +20,94 @@ export default function AddCurriculumModal({ isOpen, onClose, onSaved, initialCo
     setForm((prev) => ({ ...prev, [field]: value }))
   }
 
+  const resetForm = () => setForm({ major: '', year_level: '1', semester: '1', subject_code: '', subject_name: '', units: '3' })
+
   async function handleSave() {
     setError('')
-    if (!initialCourse) {
-      setError('No program selected.')
-      return
+    if (!initialCourse) { setError('No program selected.'); return }
+    if (!form.subject_code.trim()) { setError('Subject code is required.'); return }
+
+    const code = form.subject_code.trim().toUpperCase()
+    const major = form.major || null
+    const year = parseInt(form.year_level)
+    const sem = parseInt(form.semester)
+
+    // Check for existing curriculum entry with same subject_code, major, year and semester
+    setLoading(true)
+    let existing = null
+    try {
+      const list = await curriculumService.getByCourse(initialCourse)
+      existing = (list || []).find(c =>
+        (c.subject_code || '').toUpperCase() === code &&
+        (c.major || null) === major &&
+        parseInt(c.year_level) === year &&
+        parseInt(c.semester) === sem
+      )
+    } catch (e) {
+      console.error('Duplicate check failed', e)
     }
-    if (!form.subject_code.trim()) {
-      setError('Subject code is required.')
+    setLoading(false)
+
+    if (existing) {
+      const replace = window.confirm(
+        `"${code}" already exists in this curriculum slot.\n\nOK → Replace with new details\nCancel → Keep existing entry`
+      )
+      if (!replace) return
+
+      setLoading(true)
+      try {
+        await curriculumService.update(existing.curriculum_id || existing.id, {
+          course: initialCourse,
+          major: form.major || null,
+          year_level: year,
+          semester: sem,
+          subject_code: code,
+          subject_name: form.subject_name.trim() || null,
+          units: parseInt(form.units) || 3,
+        })
+        resetForm()
+        onSaved()
+        onClose()
+      } catch (err) {
+        let conflictData = null
+        try {
+          const parsed = JSON.parse(err.message)
+          if (parsed && parsed.type === 'SUBJECT_CONFLICT') {
+            conflictData = parsed
+          }
+        } catch (e) {}
+
+        if (conflictData) {
+          const msg = `Subject code "${conflictData.subject_code}" already exists in the system as "${conflictData.existing.subject_name}" (${conflictData.existing.unit} units).\n\n` +
+                      `Do you want to update the system to use the new name "${conflictData.incoming.subject_name}" (${conflictData.incoming.unit} units)?\n\n` +
+                      `OK/Yes → Apply new details\nCancel/No → Keep existing details`
+          const overwrite = window.confirm(msg)
+          
+          setLoading(true)
+          try {
+            await curriculumService.update(existing.curriculum_id || existing.id, {
+              course: initialCourse,
+              major: form.major || null,
+              year_level: year,
+              semester: sem,
+              subject_code: code,
+              subject_name: form.subject_name.trim() || null,
+              units: parseInt(form.units) || 3,
+            }, !overwrite, overwrite)
+            resetForm()
+            onSaved()
+            onClose()
+          } catch (retryErr) {
+            setError(retryErr.message || 'Failed to update subject.')
+          } finally {
+            setLoading(false)
+          }
+          return
+        }
+        setError(err.message || 'Failed to update subject.')
+      } finally {
+        setLoading(false)
+      }
       return
     }
 
@@ -36,16 +116,51 @@ export default function AddCurriculumModal({ isOpen, onClose, onSaved, initialCo
       await curriculumService.create({
         course: initialCourse,
         major: form.major || null,
-        year_level: parseInt(form.year_level),
-        semester: parseInt(form.semester),
-        subject_code: form.subject_code.trim().toUpperCase(),
+        year_level: year,
+        semester: sem,
+        subject_code: code,
         subject_name: form.subject_name.trim() || null,
         units: parseInt(form.units) || 3,
       })
-      setForm({ major: '', year_level: '1', semester: '1', subject_code: '', subject_name: '', units: '3' })
+      resetForm()
       onSaved()
       onClose()
     } catch (err) {
+      let conflictData = null
+      try {
+        const parsed = JSON.parse(err.message)
+        if (parsed && parsed.type === 'SUBJECT_CONFLICT') {
+          conflictData = parsed
+        }
+      } catch (e) {}
+
+      if (conflictData) {
+        const msg = `Subject code "${conflictData.subject_code}" already exists in the system as "${conflictData.existing.subject_name}" (${conflictData.existing.unit} units).\n\n` +
+                    `Do you want to update the system to use the new name "${conflictData.incoming.subject_name}" (${conflictData.incoming.unit} units)?\n\n` +
+                    `OK/Yes → Apply new details\nCancel/No → Keep existing details`
+        const overwrite = window.confirm(msg)
+        
+        setLoading(true)
+        try {
+          await curriculumService.create({
+            course: initialCourse,
+            major: form.major || null,
+            year_level: year,
+            semester: sem,
+            subject_code: code,
+            subject_name: form.subject_name.trim() || null,
+            units: parseInt(form.units) || 3,
+          }, !overwrite, overwrite)
+          resetForm()
+          onSaved()
+          onClose()
+        } catch (retryErr) {
+          setError(retryErr.message || 'Failed to add subject.')
+        } finally {
+          setLoading(false)
+        }
+        return
+      }
       setError(err.message || 'Failed to add subject.')
     } finally {
       setLoading(false)

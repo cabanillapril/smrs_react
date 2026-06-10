@@ -89,8 +89,22 @@ export const deficiencyService = {
 export const gradeService = {
   getAll: () => apiFetch('/grades/'),
   getByStudent: (studentNumber) => apiFetch(`/grades/student/${studentNumber}`),
-  create: (data) => apiFetch('/grades/', { method: 'POST', body: JSON.stringify(data) }),
-  update: (id, data) => apiFetch(`/grades/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  create: (data, keepSubject, overwriteSubject) => {
+    let url = '/grades/'
+    const params = []
+    if (keepSubject) params.push('keep_subject=true')
+    if (overwriteSubject) params.push('overwrite_subject=true')
+    if (params.length) url += '?' + params.join('&')
+    return apiFetch(url, { method: 'POST', body: JSON.stringify(data) })
+  },
+  update: (id, data, keepSubject, overwriteSubject) => {
+    let url = `/grades/${id}`
+    const params = []
+    if (keepSubject) params.push('keep_subject=true')
+    if (overwriteSubject) params.push('overwrite_subject=true')
+    if (params.length) url += '?' + params.join('&')
+    return apiFetch(url, { method: 'PUT', body: JSON.stringify(data) })
+  },
   delete: (id) => apiFetch(`/grades/${id}`, { method: 'DELETE' }),
 }
 
@@ -113,8 +127,22 @@ export const curriculumService = {
   getAll: () => apiFetch('/curriculum/'),
   getByCourse: (course) =>
     apiFetch(`/curriculum/?course=${encodeURIComponent(course)}`),
-  create: (data) => apiFetch('/curriculum/', { method: 'POST', body: JSON.stringify(data) }),
-  update: (id, data) => apiFetch(`/curriculum/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  create: (data, keepSubject, overwriteSubject) => {
+    let url = '/curriculum/'
+    const params = []
+    if (keepSubject) params.push('keep_subject=true')
+    if (overwriteSubject) params.push('overwrite_subject=true')
+    if (params.length) url += '?' + params.join('&')
+    return apiFetch(url, { method: 'POST', body: JSON.stringify(data) })
+  },
+  update: (id, data, keepSubject, overwriteSubject) => {
+    let url = `/curriculum/${id}`
+    const params = []
+    if (keepSubject) params.push('keep_subject=true')
+    if (overwriteSubject) params.push('overwrite_subject=true')
+    if (params.length) url += '?' + params.join('&')
+    return apiFetch(url, { method: 'PUT', body: JSON.stringify(data) })
+  },
   delete: (id) => apiFetch(`/curriculum/${id}`, { method: 'DELETE' }),
 }
 
@@ -205,14 +233,24 @@ export const importService = {
 
     return res.json()
   },
-  async commitGradeReportData(data) {
-    return apiFetch('/import/grade-report/commit', {
+  async commitGradeReportData(data, keepSubject, overwriteSubject) {
+    let url = '/import/grade-report/commit'
+    const params = []
+    if (keepSubject) params.push('keep_subject=true')
+    if (overwriteSubject) params.push('overwrite_subject=true')
+    if (params.length) url += '?' + params.join('&')
+    return apiFetch(url, {
       method: 'POST',
       body: JSON.stringify(data),
     })
   },
-  async commitAppraisalData(data) {
-    return apiFetch('/import/appraisal/commit', {
+  async commitAppraisalData(data, keepSubject, overwriteSubject) {
+    let url = '/import/appraisal/commit'
+    const params = []
+    if (keepSubject) params.push('keep_subject=true')
+    if (overwriteSubject) params.push('overwrite_subject=true')
+    if (params.length) url += '?' + params.join('&')
+    return apiFetch(url, {
       method: 'POST',
       body: JSON.stringify(data),
     })

@@ -6,7 +6,7 @@ import { gradeService, studentService } from '../../services/api'
 import { useData } from '../../context/AppContext'
 
 export default function AddGradeModal({ isOpen, onClose, onSaved, initialStudentId = '' }) {
-  const { students } = useData()
+  const { students, grades } = useData()
   const [form, setForm] = useState({
     student_id: '',
     subject_code: '',
@@ -49,8 +49,93 @@ export default function AddGradeModal({ isOpen, onClose, onSaved, initialStudent
   }
 
 
+  const resetForm = () => setForm({
+    student_id: '',
+    subject_code: '',
+    subject_name: '',
+    school_year: '2025-2026',
+    midterm: '',
+    finals: '',
+    instructor: '',
+    semester: '1',
+  })
+
   async function handleSave() {
     if (!form.student_id || !form.subject_code) return
+
+    const sid = form.student_id.trim().toUpperCase()
+    const code = form.subject_code.trim().toUpperCase()
+
+    // Check for existing grade with same student + subject code
+    const existing = (grades || []).find(g =>
+      (g.student_id || '').toUpperCase() === sid &&
+      (g.subject_code || '').toUpperCase() === code
+    )
+
+    if (existing) {
+      const replace = window.confirm(
+        `A grade record for "${form.subject_code.toUpperCase()}" already exists for this student.\n\n` +
+        `OK → Replace with new data\nCancel → Keep existing record`
+      )
+      if (!replace) return
+
+      setLoading(true)
+      try {
+        await gradeService.update(existing.grade_id, {
+          subject_code: form.subject_code,
+          subject_name: form.subject_name || null,
+          midterm: form.midterm ? parseFloat(form.midterm) : null,
+          finals: form.finals ? parseFloat(form.finals) : null,
+          instructor: form.instructor || null,
+          semester: parseInt(form.semester),
+          school_year: form.school_year,
+        })
+        resetForm()
+        onSaved()
+        onClose()
+      } catch (err) {
+        let conflictData = null
+        try {
+          const parsed = JSON.parse(err.message)
+          if (parsed && parsed.type === 'SUBJECT_CONFLICT') {
+            conflictData = parsed
+          }
+        } catch (e) {}
+
+        if (conflictData) {
+          const msg = `Subject code "${conflictData.subject_code}" already exists in the system as "${conflictData.existing.subject_name}" (${conflictData.existing.unit} units).\n\n` +
+                      `Do you want to update the system to use the new name "${conflictData.incoming.subject_name}"?\n\n` +
+                      `OK/Yes → Apply new details\nCancel/No → Keep existing details`
+          const overwrite = window.confirm(msg)
+          
+          setLoading(true)
+          try {
+            await gradeService.update(existing.grade_id, {
+              subject_code: form.subject_code,
+              subject_name: form.subject_name || null,
+              midterm: form.midterm ? parseFloat(form.midterm) : null,
+              finals: form.finals ? parseFloat(form.finals) : null,
+              instructor: form.instructor || null,
+              semester: parseInt(form.semester),
+              school_year: form.school_year,
+            }, !overwrite, overwrite)
+            resetForm()
+            onSaved()
+            onClose()
+          } catch (retryErr) {
+            alert(retryErr.message)
+          } finally {
+            setLoading(false)
+          }
+          return
+        }
+        alert(err.message)
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+
     setLoading(true)
     try {
       await gradeService.create({
@@ -63,19 +148,46 @@ export default function AddGradeModal({ isOpen, onClose, onSaved, initialStudent
         final_grade: form.finals ? parseFloat(form.finals) : null,
         instructor: form.instructor || null,
       })
-      setForm({
-        student_id: '',
-        subject_code: '',
-        subject_name: '',
-        school_year: '2025-2026',
-        midterm: '',
-        finals: '',
-        instructor: '',
-        semester: '1',
-      })
+      resetForm()
       onSaved()
       onClose()
     } catch (err) {
+      let conflictData = null
+      try {
+        const parsed = JSON.parse(err.message)
+        if (parsed && parsed.type === 'SUBJECT_CONFLICT') {
+          conflictData = parsed
+        }
+      } catch (e) {}
+
+      if (conflictData) {
+        const msg = `Subject code "${conflictData.subject_code}" already exists in the system as "${conflictData.existing.subject_name}" (${conflictData.existing.unit} units).\n\n` +
+                    `Do you want to update the system to use the new name "${conflictData.incoming.subject_name}"?\n\n` +
+                    `OK/Yes → Apply new details\nCancel/No → Keep existing details`
+        const overwrite = window.confirm(msg)
+        
+        setLoading(true)
+        try {
+          await gradeService.create({
+            student_id: form.student_id,
+            subject_code: form.subject_code,
+            subject_name: form.subject_name || null,
+            semester: form.semester,
+            school_year: form.school_year,
+            midterm_grade: form.midterm ? parseFloat(form.midterm) : null,
+            final_grade: form.finals ? parseFloat(form.finals) : null,
+            instructor: form.instructor || null,
+          }, !overwrite, overwrite)
+          resetForm()
+          onSaved()
+          onClose()
+        } catch (retryErr) {
+          alert(retryErr.message)
+        } finally {
+          setLoading(false)
+        }
+        return
+      }
       alert(err.message)
     } finally {
       setLoading(false)

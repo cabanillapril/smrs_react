@@ -207,8 +207,9 @@ export default function ImportAppraisalPage({ onActivity, onOpenStudentEdit }) {
         return missing;
     }
 
-    async function commitImport() {
-        if (!preview) return
+    async function commitImport(keepSubject = false, overwriteSubject = false, customPreview = null) {
+        const activePreview = customPreview || preview;
+        if (!activePreview) return
 
         // Check for completeness before starting the loading state
         const missingFields = validateAppraisalForm();
@@ -220,17 +221,51 @@ export default function ImportAppraisalPage({ onActivity, onOpenStudentEdit }) {
         setLoading(true)
         setError('')
         try {
-            const data = await importService.commitAppraisalData(preview)
+            const data = await importService.commitAppraisalData(activePreview, keepSubject, overwriteSubject)
             const studentData = data.created_student || data.student;
 
             setResult({ commit: true, created_grades: data.created_grades, created_student: data.created_student })
             setStep('done')
-            onActivity?.(`Imported Appraisal: <b>${preview?.student?.first_name} ${preview?.student?.last_name || 'student'}</b> — ${data.created_grades ?? 0} grade(s) added`, 'blue')
+            onActivity?.(`Imported Appraisal: <b>${activePreview?.student?.first_name} ${activePreview?.student?.last_name || 'student'}</b> — ${data.created_grades ?? 0} grade(s) added`, 'blue')
 
             if (onOpenStudentEdit && studentData) {
                 onOpenStudentEdit(studentData);
             }
         } catch (err) {
+            let conflictData = null
+            try {
+                const parsed = JSON.parse(err.message)
+                if (parsed && parsed.type === 'SUBJECT_CONFLICT') {
+                    conflictData = parsed
+                }
+            } catch (e) {}
+
+            if (conflictData) {
+                const msg = `Subject code "${conflictData.subject_code}" already exists in the system as "${conflictData.existing.subject_name}" (${conflictData.existing.unit} units).\n\n` +
+                            `Do you want to update the system to use the new name "${conflictData.incoming.subject_name}" (${conflictData.incoming.unit} units)?\n\n` +
+                            `OK/Yes → Apply new details\nCancel/No → Keep existing details`
+                const overwrite = window.confirm(msg)
+                if (overwrite) {
+                    commitImport(false, true, activePreview)
+                } else {
+                    const updatedPreview = {
+                        ...activePreview,
+                        rows: activePreview.rows.map(r => {
+                            if (r.subject_code.trim().toUpperCase() === conflictData.subject_code) {
+                                return {
+                                    ...r,
+                                    subject_name: conflictData.existing.subject_name,
+                                    units: conflictData.existing.unit
+                                }
+                            }
+                            return r
+                        })
+                    }
+                    setPreview(updatedPreview)
+                    commitImport(false, false, updatedPreview)
+                }
+                return
+            }
             setError(err.message || 'Failed to import PDF')
         } finally {
             setLoading(false)
