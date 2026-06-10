@@ -19,6 +19,17 @@ class DeficiencyResolve(BaseModel):
     date_resolved: Optional[str] = None
 
 
+class DeficiencyUpdate(BaseModel):
+    subject_code: Optional[str] = None
+    subject_name: Optional[str] = None
+    type: Optional[str] = None
+    status: Optional[str] = None
+    semester: Optional[str] = None
+    deadline: Optional[str] = None
+    remarks: Optional[str] = None
+    school_year: Optional[str] = None
+
+
 class DeficiencyOut(BaseModel):
     deficiency_id: int
     student_id: str

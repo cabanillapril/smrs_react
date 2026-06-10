@@ -112,80 +112,82 @@ export default function CurriculumPage({ onAddToCurriculum }) {
                         <div className="curr-year-header" style={{ background: 'var(--bg-raised)', padding: '12px 16px', fontWeight: '700', borderBottom: '1px solid var(--border)' }}>
                           {sem === 1 ? 'First' : 'Second'} Semester
                         </div>
-                        <table className="data-table" style={{ width: '100%' }}>
-                          <thead>
-                            <tr>
-                              <th style={{ width: '20%' }}>Subject Code</th>
-                              <th>Descriptive Title</th>
-                              <th style={{ width: '15%', textAlign: 'center' }}>Units</th>
-                              <th style={{ width: '120px' }}>Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {items.length > 0 ? items.map(item => (
-                              <tr key={item.curriculum_id || item.id}>
-                                <td><b>{item.subject_code}</b></td>
-                                <td>{item.subject_name}</td>
-                                <td style={{ textAlign: 'center' }}>{item.unit}</td>
-                                <td>
-                                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                                    <button
-                                      className="action-btn edit"
-                                      title="Edit"
-                                      style={{
-                                        backgroundColor: 'transparent',
-                                        color: 'var(--accent-green)',
-                                        border: 'none',
-                                      }}
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        // Implemented via modal
-                                        setEditEntry(item)
-                                        editModal.open()
-                                      }}
-                                    >
-                                      <i className="ph ph-pencil-simple" />
-                                    </button>
-
-                                    <button
-                                      className="action-btn delete"
-                                      title="Delete"
-                                      style={{
-                                        backgroundColor: 'transparent',
-                                        color: 'var(--accent-red)',
-                                        border: 'none',
-                                      }}
-                                      onClick={async (e) => {
-                                        e.stopPropagation()
-                                        if (!confirm('Delete this curriculum entry?')) return
-                                        await curriculumService.delete(item.curriculum_id || item.id)
-                                        loadCurriculum()
-                                      }}
-                                    >
-                                      <i className="ph ph-trash" />
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            )) : (
+                        <div className="table-wrapper">
+                          <table className="data-table" style={{ width: '100%' }}>
+                            <thead>
                               <tr>
-                                <td colSpan="4" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                                  No subjects added for this semester yet.
+                                <th style={{ width: '20%' }}>Subject Code</th>
+                                <th>Descriptive Title</th>
+                                <th style={{ width: '15%', textAlign: 'center' }}>Units</th>
+                                <th style={{ width: '120px' }}>Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {items.length > 0 ? items.map(item => (
+                                <tr key={item.curriculum_id || item.id}>
+                                  <td><b>{item.subject_code}</b></td>
+                                  <td>{item.subject_name}</td>
+                                  <td style={{ textAlign: 'center' }}>{item.unit}</td>
+                                  <td>
+                                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                                      <button
+                                        className="action-btn edit"
+                                        title="Edit"
+                                        style={{
+                                          backgroundColor: 'transparent',
+                                          color: 'var(--accent-green)',
+                                          border: 'none',
+                                        }}
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          // Implemented via modal
+                                          setEditEntry(item)
+                                          editModal.open()
+                                        }}
+                                      >
+                                        <i className="ph ph-pencil-simple" />
+                                      </button>
+
+                                      <button
+                                        className="action-btn delete"
+                                        title="Delete"
+                                        style={{
+                                          backgroundColor: 'transparent',
+                                          color: 'var(--accent-red)',
+                                          border: 'none',
+                                        }}
+                                        onClick={async (e) => {
+                                          e.stopPropagation()
+                                          if (!confirm('Delete this curriculum entry?')) return
+                                          await curriculumService.delete(item.curriculum_id || item.id)
+                                          loadCurriculum()
+                                        }}
+                                      >
+                                        <i className="ph ph-trash" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )) : (
+                                <tr>
+                                  <td colSpan="4" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                                    No subjects added for this semester yet.
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                            <tfoot>
+                              <tr style={{ background: 'var(--bg-raised)' }}>
+                                <td colSpan="3" style={{ textAlign: 'right', fontWeight: '600', padding: '12px 16px', borderBottom: 'none' }}>
+                                  Total Units
+                                </td>
+                                <td style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--accent-blue)', padding: '12px 16px', borderBottom: 'none' }}>
+                                  {totalUnits}
                                 </td>
                               </tr>
-                            )}
-                          </tbody>
-                          <tfoot>
-                            <tr style={{ background: 'var(--bg-raised)' }}>
-                              <td colSpan="3" style={{ textAlign: 'right', fontWeight: '600', padding: '12px 16px', borderBottom: 'none' }}>
-                                Total Units
-                              </td>
-                              <td style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--accent-blue)', padding: '12px 16px', borderBottom: 'none' }}>
-                                {totalUnits}
-                              </td>
-                            </tr>
-                          </tfoot>
-                        </table>
+                            </tfoot>
+                          </table>
+                        </div>
                       </div>
                     )
                   })}

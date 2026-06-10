@@ -196,14 +196,13 @@ export default function ImportAppraisalPage({ onActivity, onOpenStudentEdit }) {
         if (!preview.student.course || preview.student.course.trim() === '') missing.push("Student Course");
         if (!preview.student.school_year || preview.student.school_year.trim() === '') missing.push("School Year");
 
+        // Student ID is mandatory — appraisal PDFs usually lack it so the user must fill it in
+        const sid = (preview.student.student_id || '').trim();
+        if (!sid || sid === '-') missing.push("Student ID");
+
         // Subject Rows validation
         if (preview.rows.length === 0) {
             missing.push("At least one subject row");
-        } else {
-            preview.rows.forEach((row, index) => {
-                if (!row.subject_code || row.subject_code.trim() === '') missing.push(`Row ${index + 1} Subject Code`);
-                if (!row.school_year || row.school_year.trim() === '') missing.push(`Row ${index + 1} School Year`);
-            });
         }
         return missing;
     }
@@ -333,26 +332,55 @@ export default function ImportAppraisalPage({ onActivity, onOpenStudentEdit }) {
                         </div>
                         <div style={{ padding: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
                             {[
-                                { label: 'First Name', field: 'first_name' },
+                                { label: 'First Name', field: 'first_name', required: true },
                                 { label: 'Middle Name', field: 'middle_name' },
-                                { label: 'Last Name', field: 'last_name' },
-                                { label: 'Student ID', field: 'student_id' },
-                                { label: 'Course', field: 'course' },
+                                { label: 'Last Name', field: 'last_name', required: true },
+                                { label: 'Student ID', field: 'student_id', required: true },
+                                { label: 'Course', field: 'course', required: true },
                                 { label: 'Major', field: 'major' },
                                 { label: 'Status (DB)', field: 'status' },
-                                { label: 'School Year', field: 'school_year' },
-                            ].map(({ label, field }) => (
+                                { label: 'School Year', field: 'school_year', required: true },
+                            ].map(({ label, field, required }) => {
+                                const isStudentId = field === 'student_id';
+                                const isEmpty = !preview.student[field] || (preview.student[field] || '').toString().trim() === '' || preview.student[field] === '-';
+                                const showError = required && isEmpty;
+                                return (
                                 <div key={field}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
+                                        {required && (
+                                            <span style={{
+                                                fontSize: '0.65rem', fontWeight: 700,
+                                                color: showError ? 'var(--accent-red)' : 'var(--accent-blue)',
+                                                background: showError ? 'rgba(248,113,113,0.12)' : 'rgba(59,130,246,0.1)',
+                                                borderRadius: 4, padding: '1px 5px', letterSpacing: '0.04em'
+                                            }}>REQUIRED</span>
+                                        )}
+                                        {isStudentId && (
+                                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                                                — enter manually
+                                            </span>
+                                        )}
+                                    </div>
                                     <EditableField
                                         type={field === 'status' ? 'select' : 'text'}
                                         options={field === 'status' ? ['Regular', 'Irregular'] : []}
                                         label={label}
-                                        value={preview.student[field] || ''}
-                                        placeholder={field === 'school_year' ? 'e.g. 2025-2026' : ''}
+                                        value={preview.student[field] === '-' ? '' : (preview.student[field] || '')}
+                                        placeholder={
+                                            field === 'school_year' ? 'e.g. 2025-2026' :
+                                            field === 'student_id' ? 'e.g. 23-00456' : ''
+                                        }
                                         onSave={(val) => handleStudentChange(field, val)}
+                                        style={showError ? { borderColor: 'var(--accent-red)', boxShadow: '0 0 0 2px rgba(248,113,113,0.15)' } : {}}
                                     />
+                                    {showError && (
+                                        <div style={{ fontSize: '0.72rem', color: 'var(--accent-red)', marginTop: 3 }}>
+                                            Required
+                                        </div>
+                                    )}
                                 </div>
-                            ))}
+                                );
+                            })}
                             <EditableField
                                 className="full-span"
                                 label="Address"
@@ -385,6 +413,7 @@ export default function ImportAppraisalPage({ onActivity, onOpenStudentEdit }) {
                                                 <th style={{ width: 60, textAlign: 'center' }}>Units</th>
                                                 <th style={{ width: 80, textAlign: 'center' }}>Midterm</th>
                                                 <th style={{ width: 80, textAlign: 'center' }}>Final</th>
+                                                <th style={{ width: 60, textAlign: 'center' }}>Sem</th>
                                                 <th>Instructor</th>
                                                 <th style={{ width: 50 }}></th>
                                             </tr>
@@ -420,6 +449,12 @@ export default function ImportAppraisalPage({ onActivity, onOpenStudentEdit }) {
                                                         <EditableField
                                                             value={s.final_grade}
                                                             onSave={(val) => handleRowChange(s.originalIndex, 'final_grade', parseFloat(val))}
+                                                        />
+                                                    </td>
+                                                    <td style={{ textAlign: 'center' }}>
+                                                        <EditableField
+                                                            value={s.semester}
+                                                            onSave={(val) => handleRowChange(s.originalIndex, 'semester', parseInt(val))}
                                                         />
                                                     </td>
                                                     <td>

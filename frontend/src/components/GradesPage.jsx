@@ -48,9 +48,6 @@ export default function GradesPage({ onAdd, onEdit, onViewStudent }) {
           <p className="page-subtitle">View and manage student grade records</p>
         </div>
         <div className="page-actions">
-          <button className="btn btn-ghost" onClick={refresh} disabled={loading}>
-            <i className={`ph ph-arrows-clockwise ${loading ? 'ph-spin' : ''}`} /> Refresh
-          </button>
           <button className="btn btn-primary" onClick={onAdd}>+ Add Grade</button>
         </div>
       </div>
@@ -88,7 +85,7 @@ export default function GradesPage({ onAdd, onEdit, onViewStudent }) {
           <option value="">All Sections</option>
           {SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
-        
+
         <select className="filter-select" value={semester} onChange={(e) => setSemester(e.target.value)}>
           <option value="">All Semesters</option>
           <option value="1">1st Semester</option>
@@ -121,6 +118,7 @@ export default function GradesPage({ onAdd, onEdit, onViewStudent }) {
             <tr>
               <th style={{ width: '40px' }}>#</th>
               <th>Subject</th>
+              <th style={{ width: '60px', textAlign: 'center' }}>Sem</th>
               <th>Instructor</th>
               <th>Midterm</th>
               <th>Finals</th>
@@ -182,6 +180,7 @@ export default function GradesPage({ onAdd, onEdit, onViewStudent }) {
                         <td>
                           <div style={{ fontWeight: 500 }}>{g.subject_code}</div>
                         </td>
+                        <td style={{ textAlign: 'center' }}>{g.semester}</td>
                         <td>
                           <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>{g.instructor || '—'}</div>
                         </td>

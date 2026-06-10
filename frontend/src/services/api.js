@@ -16,7 +16,7 @@ async function apiFetch(path, options = {}) {
     const res = await fetch(API_BASE + path, { ...options, headers })
 
     if (!res.ok) {
-      if (res.status === 401) {
+      if (res.status === 401 && path !== '/auth/login') {
         localStorage.removeItem('smrs_token')
         window.location.reload()
       }

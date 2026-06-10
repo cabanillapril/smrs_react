@@ -4,6 +4,7 @@ from typing import Optional
 class EnrollmentCreate(BaseModel):
     student_id: str
     subject_code: str
+    subject_name: Optional[str] = None
     semester: Optional[int] = 1
     school_year: Optional[str] = None
     instructor: Optional[str] = None
@@ -11,6 +12,8 @@ class EnrollmentCreate(BaseModel):
     schedule: Optional[str] = None
 
 class EnrollmentUpdate(BaseModel):
+    subject_code: Optional[str] = None
+    subject_name: Optional[str] = None
     semester: Optional[int] = None
     school_year: Optional[str] = None
     instructor: Optional[str] = None

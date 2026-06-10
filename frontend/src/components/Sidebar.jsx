@@ -1,4 +1,4 @@
-export default function Sidebar({ isOpen, activePage, onNavigate, onLogout, user }) {
+export default function Sidebar({ isOpen, activePage, onNavigate, onClose, onLogout, user }) {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'ph-squares-four', section: 'MAIN' },
     { id: 'students', label: 'Students', icon: 'ph-users' },
@@ -22,6 +22,11 @@ export default function Sidebar({ isOpen, activePage, onNavigate, onLogout, user
           <span className="logo-sub">v1.0</span>
         </div>
       </div>
+
+      {/* Mobile close button: shown only on mobile via CSS, hidden on desktop */}
+      <button className="sidebar-close-btn" onClick={onClose} aria-label="Close menu">
+        <i className="ph ph-x" />
+      </button>
 
       <nav className="sidebar-nav">
         {navItems.map((item, index) => (
@@ -52,8 +57,8 @@ export default function Sidebar({ isOpen, activePage, onNavigate, onLogout, user
         <div className="user-pill">
           <div className="user-avatar">{(user || 'A').substring(0, 2).toUpperCase()}</div>
           <div className="user-info">
-            <span className="user-name">{user || 'Administrator'}</span>
-            <span className="user-role">Registrar Office</span>
+            <span className="user-name">{user === 'admin' ? 'Admin' : (user || 'Administrator')}</span>
+            <span className="user-role">College of Technology</span>
           </div>
         </div>
         <button className="logout-btn" onClick={onLogout}>

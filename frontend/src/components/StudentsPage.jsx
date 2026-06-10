@@ -75,6 +75,16 @@ export default function StudentsPage({ onEdit, onView, onAdd, globalSearch = '' 
     }
   }
 
+  async function handleDelete(s) {
+    if (!confirm(`Are you sure you want to permanently delete ${s.first_name} ${s.last_name}?`)) return
+    try {
+      await studentService.delete(s.student_number)
+      refresh()
+    } catch (err) {
+      alert(`Failed to delete student: ${err.message}`)
+    }
+  }
+
   useEffect(() => {
     if (globalSearch !== undefined) setSearch(globalSearch)
   }, [globalSearch])
@@ -87,9 +97,6 @@ export default function StudentsPage({ onEdit, onView, onAdd, globalSearch = '' 
           <p className="page-subtitle">Manage and view all student records</p>
         </div>
         <div className="page-actions">
-          <button className="btn btn-ghost" onClick={refresh} disabled={loading}>
-            <i className={`ph ph-arrows-clockwise ${loading ? 'ph-spin' : ''}`} /> Refresh
-          </button>
           <button className="btn btn-ghost" onClick={handlePromote}>
             <i className="ph ph-arrow-circle-up" /> Promote Year Levels
           </button>
@@ -175,6 +182,7 @@ export default function StudentsPage({ onEdit, onView, onAdd, globalSearch = '' 
               <th>Year</th>
               <th>Section</th>
               <th>Status</th>
+              <th style={{ width: '110px', textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -204,11 +212,41 @@ export default function StudentsPage({ onEdit, onView, onAdd, globalSearch = '' 
                 <td>{s.year_level}</td>
                 <td><span className="section-badge">{s.section}</span></td>
                 <td><StatusBadge status={s.status} /></td>
+                <td onClick={(e) => e.stopPropagation()}>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', justifyContent: 'flex-end' }}>
+                    <button
+                      className="action-btn edit"
+                      onClick={() => onView(s)}
+                      title="Edit Profile"
+                      style={{
+                        backgroundColor: 'transparent',
+                        color: 'var(--accent-green)',
+                        border: 'none',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <i className="ph ph-pencil-simple" />
+                    </button>
+                    <button
+                      className="action-btn delete"
+                      onClick={() => handleDelete(s)}
+                      title="Delete"
+                      style={{
+                        backgroundColor: 'transparent',
+                        color: 'var(--accent-red)',
+                        border: 'none',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <i className="ph ph-trash" />
+                    </button>
+                  </div>
+                </td>
               </tr>
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan="7" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                <td colSpan="8" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                   No student records found.
                 </td>
               </tr>

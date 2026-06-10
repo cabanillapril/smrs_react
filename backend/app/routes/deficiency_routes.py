@@ -4,7 +4,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 from ..database.db import get_db
 from ..repository import deficiency_repo
-from ..schemas.deficiency_schema import DeficiencyResolve, DeficiencyOut
+from ..schemas.deficiency_schema import DeficiencyResolve, DeficiencyOut, DeficiencyUpdate
 from ..models.deficiencies_model import Deficiency
 from ..models.subjects_model import Subject
 from ..models.students_model import Student
@@ -49,6 +49,18 @@ def get_deficiencies_by_student(student_id: str, db: Session = Depends(get_db)):
 
 @router.post("/", response_model=DeficiencyOut, status_code=201)
 def create_deficiency(data: DeficiencyIn, db: Session = Depends(get_db)):
+    # Verify student exists
+    student_obj = db.query(Student).filter(
+        (Student.student_id == data.student_id) | (Student.student_number == data.student_id)
+    ).first()
+    if not student_obj:
+        raise HTTPException(
+            status_code=404, 
+            detail=f"Student ID '{data.student_id}' does not exist in the database. Please register the student first."
+        )
+    # Use normalized student_id
+    data.student_id = student_obj.student_id
+
     code = data.subject_code.strip().upper()
 
     # Find or create subject
@@ -87,6 +99,14 @@ def resolve_deficiency(deficiency_id: int, data: DeficiencyResolve, db: Session 
     from datetime import date
     date_resolved = data.date_resolved or str(date.today())
     result = deficiency_repo.resolve(db, deficiency_id, date_resolved)
+    if not result:
+        raise HTTPException(status_code=404, detail="Deficiency not found")
+    return result
+
+
+@router.put("/{deficiency_id}", response_model=DeficiencyOut)
+def update_deficiency(deficiency_id: int, data: DeficiencyUpdate, db: Session = Depends(get_db)):
+    result = deficiency_repo.update(db, deficiency_id, data)
     if not result:
         raise HTTPException(status_code=404, detail="Deficiency not found")
     return result

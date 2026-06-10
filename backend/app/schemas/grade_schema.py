@@ -22,6 +22,8 @@ class GradeUpdate(BaseModel):
     grade: Optional[float] = None
     remarks: Optional[str] = None
     instructor: Optional[str] = None
+    school_year: Optional[str] = None
+    semester: Optional[int] = None
 
 
 class GradeOut(BaseModel):

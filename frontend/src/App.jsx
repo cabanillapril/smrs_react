@@ -202,7 +202,14 @@ export default function App() {
       <Sidebar
         isOpen={sidebarOpen}
         activePage={currentPage}
-        onNavigate={setCurrentPage}
+        onNavigate={(page) => {
+          setCurrentPage(page);
+          // Only auto-close sidebar on mobile
+          if (window.innerWidth <= 768) {
+            setSidebarOpen(false);
+          }
+        }}
+        onClose={() => setSidebarOpen(false)}
         onLogout={handleLogout}
         user={user}
       />
@@ -325,6 +332,11 @@ export default function App() {
           addActivity(`Updated curriculum for <b>${initialCourse}</b>`, 'blue')
         }}
       />
+
+      {/* Overlay: Only visible on mobile when sidebar is open */}
+      {sidebarOpen && (
+        <div className="sidebar-overlay mobile-only" onClick={() => setSidebarOpen(false)} />
+      )}
     </div>
   )
 }

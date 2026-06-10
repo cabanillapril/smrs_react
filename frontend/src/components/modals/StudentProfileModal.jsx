@@ -209,15 +209,7 @@ export default function StudentProfileModal({ isOpen, onClose, student, onEdit, 
             {activeTab === 'profile' && (
               <div className="profile-section">
                 {/* Upper profile header (restored) */}
-                <div
-                  style={{
-                    marginBottom: '24px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '16px',
-                    justifyContent: 'space-between',
-                  }}
-                >
+                <div className="profile-header-row">
                   <div className="profile-info-main">
                     <h2 style={{ marginBottom: 8 }}>
                       {student.first_name} {student.middle_name ? student.middle_name[0] + '.' : ''} {student.last_name}
@@ -246,7 +238,7 @@ export default function StudentProfileModal({ isOpen, onClose, student, onEdit, 
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}>
+                  <div className="profile-action-btns">
                     {student.status !== 'Graduated' && (
                       <button className="btn btn-ghost" onClick={handleIndividualPromote}>
                         <i className="ph ph-arrow-circle-up" /> Promote Student
@@ -261,17 +253,7 @@ export default function StudentProfileModal({ isOpen, onClose, student, onEdit, 
                   </div>
                 </div>
 
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: '24px',
-                    background: 'var(--bg-raised)',
-                    padding: '20px',
-                    borderRadius: 'var(--radius)',
-                    border: '1px solid var(--border)',
-                  }}
-                >
+                <div className="profile-info-grid">
 
                   <div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>

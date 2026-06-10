@@ -16,15 +16,32 @@ def get_by_student(db: Session, student_id: str):
     return [_enrich(e, db) for e in enrollments]
 
 def create(db: Session, data: EnrollmentCreate):
+    # Verify student exists
+    student_obj = db.query(Student).filter(
+        (Student.student_id == data.student_id) | (Student.student_number == data.student_id)
+    ).first()
+    if not student_obj:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=404, 
+            detail=f"Student ID '{data.student_id}' does not exist in the database. Please register the student first."
+        )
+    # Use normalized student_id
+    data.student_id = student_obj.student_id
+
     code = data.subject_code.strip().upper()
     subject = db.query(Subject).filter(Subject.subject_code == code).first()
     if not subject:
         subject = Subject(
             subject_code=code,
-            subject_name=code,
+            subject_name=data.subject_name.strip() if data.subject_name else code,
             unit=int(data.units) if data.units else 3
         )
         db.add(subject)
+        db.commit()
+        db.refresh(subject)
+    elif data.subject_name and data.subject_name.strip():
+        subject.subject_name = data.subject_name.strip()
         db.commit()
         db.refresh(subject)
         
@@ -47,8 +64,36 @@ def update(db: Session, enrollment_id: int, data: EnrollmentUpdate):
     enroll = db.query(Enrollment).filter(Enrollment.enrollment_id == enrollment_id).first()
     if not enroll:
         return None
-    for k, v in data.model_dump(exclude_unset=True).items():
+
+    # Handle Subject Code/Name updates
+    target_subject_id = enroll.subject_id
+    if data.subject_code:
+        code = data.subject_code.strip().upper()
+        subject = db.query(Subject).filter(Subject.subject_code == code).first()
+        if not subject:
+            subject = Subject(
+                subject_code=code,
+                subject_name=data.subject_name.strip() if data.subject_name else code,
+                unit=int(data.units) if data.units else 3,
+            )
+            db.add(subject)
+        db.commit()
+        db.refresh(subject)
+        target_subject_id = subject.subject_id
+
+    if data.subject_name and data.subject_name.strip():
+        subject = db.query(Subject).filter(Subject.subject_id == target_subject_id).first()
+        if subject:
+            subject.subject_name = data.subject_name.strip()
+            db.commit()
+
+    enroll.subject_id = target_subject_id
+
+    # Exclude non-model fields before updating attributes
+    update_data = data.model_dump(exclude_unset=True, exclude={'subject_code', 'subject_name'})
+    for k, v in update_data.items():
         setattr(enroll, k, v)
+
     db.commit()
     db.refresh(enroll)
     return _enrich(enroll, db)

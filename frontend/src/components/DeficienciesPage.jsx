@@ -86,9 +86,6 @@ export default function DeficienciesPage({ onAdd, onViewStudent }) {
           <p className="page-subtitle">Track and manage student academic deficiencies</p>
         </div>
         <div className="page-actions">
-          <button className="btn btn-ghost" onClick={refresh} disabled={loading}>
-            <i className={`ph ph-arrows-clockwise ${loading ? 'ph-spin' : ''}`} /> Refresh
-          </button>
           <button className="btn btn-primary" onClick={onAdd}>+ Record Deficiency</button>
         </div>
       </div>

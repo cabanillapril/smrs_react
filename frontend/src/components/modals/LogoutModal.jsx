@@ -9,7 +9,7 @@ export default function LogoutModal({ isOpen, onClose, onConfirm }) {
     }, [isOpen])
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Sign out" size="narrow">
+        <Modal isOpen={isOpen} onClose={onClose} title="Log out" size="narrow">
             <div
                 style={{
                     display: 'flex',
@@ -38,10 +38,10 @@ export default function LogoutModal({ isOpen, onClose, onConfirm }) {
                             justifyContent: 'center',
                             color: 'white',
                             fontWeight: 800,
-                            fontSize: '1.1rem',
+                            fontSize: '1.4rem',
                         }}
                     >
-                        <i className="ph ph-sign-out" />
+                        <i className="ph-bold ph-sign-out" />
                     </div>
 
                     <div>
@@ -49,7 +49,7 @@ export default function LogoutModal({ isOpen, onClose, onConfirm }) {
                             Logout
                         </div>
                         <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: 3 }}>
-                            Are you sure you want to sign out?
+                            Are you sure you want to log out?
                         </div>
                     </div>
                 </div>
@@ -73,11 +73,10 @@ export default function LogoutModal({ isOpen, onClose, onConfirm }) {
                         disabled={confirming}
                         style={{ color: 'white' }}
                     >
-                        {confirming ? 'Signing out…' : 'Sign out'}
+                        {confirming ? 'Logging out…' : 'Log out'}
                     </button>
                 </div>
             </div>
         </Modal>
     )
 }
-

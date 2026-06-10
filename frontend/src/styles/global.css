@@ -107,6 +107,31 @@ textarea {
   border-bottom: 1px solid var(--border)
 }
 
+/* Mobile-only close button — hidden by default on desktop */
+.sidebar-close-btn {
+  display: none;
+  position: absolute;
+  top: 16px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 1.05rem;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  z-index: 10
+}
+
+.sidebar-close-btn:hover {
+  background: rgba(248, 113, 113, 0.1);
+  border-color: rgba(248, 113, 113, 0.3);
+  color: var(--accent-red)
+}
+
 .logo-mark {
   width: 38px;
   height: 38px;
@@ -390,6 +415,26 @@ textarea {
     opacity: 1;
     transform: translateY(0)
   }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg) }
+}
+
+.ph-spin {
+  animation: spin 0.75s linear infinite;
+  display: inline-block;
+}
+
+.btn-spinner {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.65s linear infinite;
+  flex-shrink: 0;
 }
 
 @keyframes growBar {
@@ -1530,6 +1575,38 @@ textarea {
   flex-shrink: 0
 }
 
+/* Student Profile Modal — personal info box */
+.profile-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  background: var(--bg-raised);
+  padding: 20px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  width: 100%
+}
+
+/* Profile action buttons row (Promote / Edit / Delete) */
+.profile-action-btns {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+  flex-wrap: wrap;
+  flex-shrink: 0
+}
+
+/* Profile name + action buttons row */
+.profile-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap
+}
+
+
 .info-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1812,12 +1889,18 @@ textarea {
 
 @media(max-width:768px) {
   .sidebar {
-    transform: translateX(-100%)
+    transform: translateX(-100%);
+    position: fixed
   }
 
   .sidebar.open {
     transform: translateX(0);
     box-shadow: var(--shadow)
+  }
+
+  /* Show mobile close button only on mobile */
+  .sidebar-close-btn {
+    display: flex
   }
 
   .main {
@@ -1854,6 +1937,17 @@ textarea {
 
   .charts-row {
     grid-template-columns: 1fr
+  }
+
+  /* Profile modal — single-column info grid on mobile */
+  .profile-info-grid {
+    grid-template-columns: 1fr
+  }
+
+  .profile-action-btns {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-start
   }
 }
 

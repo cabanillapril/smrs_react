@@ -456,103 +456,274 @@ _YEAR_ORDINAL = {'first': 1, 'second': 2, 'third': 3, 'fourth': 4, 'fifth': 5}
 # Maps semester labels to integers
 _SEM_MAP = {'first': 1, '1st': 1, 'second': 2, '2nd': 2, 'summer': 3}
 
-# Section header pattern
+# Section header pattern: e.g. "First Year - First Semester"
 _SECTION_HEADER = re.compile(
-    r'(First|Second|Third|Fourth|Fifth)\s+Year\s*[-\u2013\u2014\s:]+\s*(First|Second|Summer|3rd)\s+Semester',
+    r'(First|Second|Third|Fourth|Fifth|1st|2nd|3rd|4th|5th)\s+Year\s*[-\u2013\u2014\s:]+\s*(First|Second|Summer|3rd|1st|2nd)\s*(?:Semester|Sem)?',
     re.IGNORECASE,
 )
 
-def _match_subject_line(line: str):
-    """Try both subject-line patterns; return the first match or None."""
-    m = _SUBJECT_WITH_GRADES_NUMBERED.match(line)
-    if m:
-        return m
-    return _SUBJECT_WITH_GRADES_PLAIN.match(line)
+# Regex for subjects with numbered codes (e.g. MATH 101)
+_SUBJECT_WITH_GRADES_NUMBERED = re.compile(
+    r'^(?P<code>[A-Za-z]{2,}(?:\s+[A-Za-z]+)?\s+\d+)'
+    r'\s+'
+    r'(?P<title>.+?)'
+    r'\s+(?P<units>\(?\d+\)?)'
+    r'\s+(?P<mid>\d+(?:\.\d+)?)'
+    r'\s+(?P<fin>\d+(?:\.\d+)?)'
+    r'\s+(?P<sem>(?:1st|2nd|3rd|Summer|[1-3])\s*(?:st|nd|rd|th)?\s*(?:sem(?:ester)?)?)'
+    r'(?:\s+(?P<instructor>.+))?$',
+    re.IGNORECASE
+)
 
+# Regex for subjects with plain alphabetic codes (e.g. STS, RIZAL)
+_SUBJECT_WITH_GRADES_PLAIN = re.compile(
+    r'^(?P<code>[A-Za-z]{2,10})'
+    r'\s+'
+    r'(?P<title>.+?)'
+    r'\s+(?P<units>\(?\d+\)?)'
+    r'\s+(?P<mid>\d+(?:\.\d+)?)'
+    r'\s+(?P<fin>\d+(?:\.\d+)?)'
+    r'\s+(?P<sem>(?:1st|2nd|3rd|Summer|[1-3])\s*(?:st|nd|rd|th)?\s*(?:sem(?:ester)?)?)'
+    r'(?:\s+(?P<instructor>.+))?$',
+    re.IGNORECASE
+)
+
+def _match_subject_line(line: str):
+    m = _SUBJECT_WITH_GRADES_NUMBERED.match(line)
+    if m: return m
+    return _SUBJECT_WITH_GRADES_PLAIN.match(line)
 
 def _normalize_units(raw: str) -> int:
     """Convert units string (e.g. '(3)' or '6') to integer."""
     cleaned = re.sub(r'[^\d]', '', raw)
     return int(cleaned) if cleaned else 3
 
+# Pattern that identifies the start of a subject code at an arbitrary position
+# in a long concatenated line. Used by preprocess_appraisal_text to re-split.
+_SUBJ_SPLIT_RE = re.compile(
+    r'(?<=[a-zA-Z\d])'
+    r'\s+'
+    r'(?='
+        r'(?:[A-Za-z]{2,}(?:\s+[A-Za-z]{0,10})?\s+\d{1,3})'
+        r'|(?:[A-Za-z]{3,10}\s+(?:Life|Works|Theory|Drawing|Art|Basic|Readings|Contemporary|Sciences|Engineering|Cooperative|Purposive|Movement|Exercised|Industrial|Shop|Group|Gender|Human|Principles|Supervised|Systems|Intellectual|Statistics|Entrepreneurial|Science|Technology|Society|Introduction|Philippine|Understanding|Modern|Mathematics|Programming|Calculus|Physics|Chemistry|History|Literature|Communication|Research|Economics|Psychology|Ethics|Nutrition|Education|Civics|Law|Management|Computer|English|Filipino|Spanish|Religion|Theology|Accounting|Finance|Marketing|Dynamics|Culture|Values|Citizenship|Values|Training))'
+    r')',
+    re.IGNORECASE,
+)
 
-def preprocess_appraisal_text(raw: str) -> List[str]:
+
+def _split_concatenated_subjects(line: str) -> List[str]:
+    """
+    When pypdfium2 extracts native text, it sometimes concatenates several
+    subject rows that were visually on separate PDF lines into one long string.
+    This function detects those boundaries and splits them back into individual
+    subject lines using a robust lookahead scanner.
+    """
+    if len(line) < 20:
+        return [line]
+
+    tokens = line.split()
+    output_lines: List[str] = []
+    
+    def is_numbered_1word(idx: int) -> bool:
+        if idx + 1 >= len(tokens):
+            return False
+        t = tokens[idx]
+        nxt = tokens[idx + 1]
+        if not re.match(r'^[A-Z]', t):
+            return False
+        if t.upper() in ('AND', 'OF', 'FOR', 'IN', 'THE', 'WITH', 'ON', 'TO', 'BY', 'TOTAL', 'ADVISER'):
+            return False
+        return bool(re.fullmatch(r'\d{1,3}', nxt))
+
+    def is_numbered_2word(idx: int) -> bool:
+        if idx + 2 >= len(tokens):
+            return False
+        t = tokens[idx]
+        t2 = tokens[idx + 1]
+        nxt = tokens[idx + 2]
+        if not re.match(r'^[A-Z]', t) or not re.match(r'^[A-Z]', t2):
+            return False
+        if t.upper() in ('AND', 'OF', 'FOR', 'IN', 'THE', 'WITH', 'ON', 'TO', 'BY', 'TOTAL', 'ADVISER'):
+            return False
+        return bool(re.fullmatch(r'\d{1,3}', nxt))
+
+    def is_plain_code(idx: int) -> bool:
+        if idx >= len(tokens):
+            return False
+        t = tokens[idx]
+        if not (t.isupper() and 3 <= len(t) <= 6):
+            return False
+        if t in ('AND', 'FOR', 'THE', 'SEM', 'TOTAL', 'UNITS'):
+            return False
+        return True
+
+    def is_subject_start(idx: int) -> bool:
+        return is_numbered_1word(idx) or is_numbered_2word(idx) or is_plain_code(idx)
+
+    # Find the grade/semester blocks in the tokens list.
+    grade_blocks = []
+    i = 0
+    while i <= len(tokens) - 4:
+        t1, t2, t3, t4 = tokens[i:i+4]
+        # Validate t1 (units)
+        u_m = re.fullmatch(r'\(?(\d{1,2})\)?', t1)
+        if not u_m:
+            i += 1
+            continue
+        u_val = int(u_m.group(1))
+        if not (1 <= u_val <= 20):
+            i += 1
+            continue
+            
+        # Validate t2 and t3 (grades)
+        try:
+            g1 = float(t2)
+            g2 = float(t3)
+            if not (1.0 <= g1 <= 5.0 and 1.0 <= g2 <= 5.0):
+                i += 1
+                continue
+        except ValueError:
+            i += 1
+            continue
+            
+        # Validate t4 (semester)
+        sem_clean = re.sub(r'(?:st|nd|rd|th|sem|ester)', '', t4, flags=re.IGNORECASE).lower()
+        if sem_clean not in ('1', '2', '3', 'summer'):
+            i += 1
+            continue
+            
+        end_idx = i + 4
+        while end_idx < len(tokens):
+            nxt = tokens[end_idx].lower()
+            if nxt in ('sem', 'semester', 'st', 'nd', 'rd', 'th'):
+                end_idx += 1
+            else:
+                break
+        
+        grade_blocks.append({
+            'start': i,
+            'end': end_idx
+        })
+        i = end_idx
+        
+    if not grade_blocks:
+        return [line]
+        
+    current_start = 0
+    for idx, gb in enumerate(grade_blocks):
+        post_idx = gb['end']
+        split_at = len(tokens)
+        if idx + 1 < len(grade_blocks):
+            next_gb_start = grade_blocks[idx + 1]['start']
+            post_tokens_len = next_gb_start - post_idx
+            
+            if post_tokens_len >= 2:
+                if is_subject_start(post_idx + 1):
+                    split_at = post_idx + 1
+                else:
+                    split_at = post_idx
+            else:
+                split_at = post_idx
+                
+        # Check if there is a TOTAL or Adviser token in post-grade tokens
+        for temp_idx in range(post_idx, split_at):
+            if tokens[temp_idx].upper() in ('TOTAL', 'ADVISER'):
+                split_at = temp_idx
+                break
+
+        subj_tokens = tokens[current_start:split_at]
+        if subj_tokens:
+            output_lines.append(' '.join(subj_tokens))
+        current_start = split_at
+
+    if current_start < len(tokens):
+        rem = tokens[current_start:]
+        if rem and rem[0].upper() not in ('TOTAL', 'ADVISER'):
+            output_lines.append(' '.join(rem))
+
+    return output_lines
+
+
+
+def preprocess_appraisal_text(raw: str) -> str:
+    """
+    Normalise line endings, re-join split semester suffixes (e.g. '1\\nst sem'),
+    and re-split lines that contain multiple concatenated subject rows.
+
+    The UNP appraisal PDF has two problematic patterns from pypdfium2 extraction:
+
+      Pattern A – semester suffix split across two lines:
+          Line N:   'ELEX 121 Electronics Theory 6 1.25 2.75 1'
+          Line N+1: 'st sem Rabanal'
+        → Join N+1 onto N.
+
+      Pattern B – multiple subjects on one line:
+          'Ind Draw 102 ... 2 Dar Comp 101 ... 2 Gar Hum 101 ... 2 Tend'
+        → Split on each subject boundary.
+
+      Pattern C – a line that starts with a semester suffix AND contains
+        additional subjects after the instructor:
+          'st sem Cruz Soc Sci 101 Understanding the Self 3 1.25 1.75 1'
+        This needs the sem-suffix joined with the PREVIOUS line's tail,
+        AND the remainder treated as a new line for splitting.
+    """
     text = raw.replace('\r\r\n', '\n').replace('\r\n', '\n').replace('\r', '\n')
-    return [line.strip() for line in text.splitlines() if line.strip()]
+    raw_lines = [l.strip() for l in text.splitlines() if l.strip()]
 
-def _parse_appraisal_chunk(lines: List[str], current_year: int, current_sem: int) -> Optional[dict]:
-    """Parses a list of lines representing a single subject entry."""
-    full_text = " ".join(lines)
-    
-    # 1. Identify Subject Code (Anchored by letters followed by numbers, or specific plain codes)
-    # We use re.search because noise like student names might precede the code on the same line.
-    code_pattern = re.compile(r'\b([A-Za-z]{2,}(?:\s+[A-Za-z0-9]+)?\s+\d+|ETHICS|RIZAL|STS|OJT|PCOM|PATHFIT|NSTP\s*\d|GE\s+[A-Z0-9]+)\b', re.IGNORECASE)
-    m_code = code_pattern.search(full_text)
-    if not m_code:
-        return None
-    
-    subject_code = m_code.group(1).upper().strip()
-    # Text after the subject code contains the title, units, grades, and instructor
-    remaining_text = full_text[m_code.end():].strip()
+    def _apply_sem_merges(lines: List[str]) -> List[str]:
+        """Repeatedly apply Pattern A and Pattern C until the list no longer changes."""
+        changed = True
+        while changed:
+            changed = False
+            result: List[str] = []
+            i = 0
+            while i < len(lines):
+                line = lines[i]
 
-    # 2. Extract Numbers (Units, Midterm, Final)
-    # Look for tokens that are grades (1.0-5.0) or units (integers)
-    # We exclude the code from this search by using the remaining_text
-    num_pattern = re.compile(r'\b(\d+(?:\.\d+)?|INC)\b', re.IGNORECASE)
-    tokens = [t.group(1) for t in num_pattern.finditer(remaining_text)]
-    
-    if len(tokens) < 1:
-        return None # No grades found
+                # Pattern A: next line starts with st/nd/rd/th sem
+                if i + 1 < len(lines) and re.match(r'^(?:st|nd|rd|th)\s*sem', lines[i + 1], re.IGNORECASE):
+                    line = line + ' ' + lines[i + 1]
+                    i += 1
+                    result.append(line)
+                    i += 1
+                    changed = True
+                    continue
 
-    # Vertical layout adjustment: 
-    # Sometimes the semester digit (1 or 2) appears as the first number.
-    # If we have 4+ numbers and the first is 1 or 2, and the second is a likely unit (e.g. 3, 6), 
-    # we shift the mapping to skip the semester digit.
-    offset = 0
-    if len(tokens) >= 3 and tokens[0] in ('1', '2') and tokens[1] in ('1', '2', '3', '6', '12'):
-        # Likely: [Semester, Units, Grade, ...]
-        offset = 1
+                # Pattern C: current line starts with sem suffix
+                sem_m = re.match(r'^((?:st|nd|rd|th)\s*sem\s*)', line, re.IGNORECASE)
+                if sem_m and result:
+                    suffix    = sem_m.group(1)
+                    remainder = line[sem_m.end():].strip()
+                    instr_m   = re.match(r'^(\S+)\s*(.*)', remainder)
+                    if instr_m:
+                        instr_tok  = instr_m.group(1)
+                        next_subjs = instr_m.group(2).strip()
+                        result[-1] = result[-1] + ' ' + suffix + instr_tok
+                        if next_subjs:
+                            result.append(next_subjs)
+                    else:
+                        result[-1] = result[-1] + ' ' + suffix + remainder
+                    i += 1
+                    changed = True
+                    continue
 
-    units = 3
-    mid = None
-    fin = None
+                result.append(line)
+                i += 1
+            lines = result
+        return lines
 
-    relevant_tokens = tokens[offset:]
-    if len(relevant_tokens) >= 3:
-        units = _normalize_units(relevant_tokens[0])
-        mid = parse_grade_token(relevant_tokens[1])
-        fin = parse_grade_token(relevant_tokens[2])
-    elif len(relevant_tokens) == 2:
-        mid = parse_grade_token(relevant_tokens[0])
-        fin = parse_grade_token(relevant_tokens[1])
-    elif len(relevant_tokens) == 1:
-        fin = parse_grade_token(relevant_tokens[0])
+    # Pass 1 – merge sem suffix lines
+    merged = _apply_sem_merges(raw_lines)
 
-    # 3. Description & Instructor
-    # Description is between the Code and the first Grade/Unit token
-    first_num_match = num_pattern.search(remaining_text)
-    subject_name = remaining_text[:first_num_match.start()].strip() if first_num_match else remaining_text
-    
-    # Instructor is after the last Grade token
-    last_num_match = list(num_pattern.finditer(remaining_text))[-1]
-    instructor_raw = remaining_text[last_num_match.end():].strip()
-    # Clean instructor from noise like "st sem"
-    instructor = re.sub(r'^(?:st|nd|rd|th)?\s*sem(?:ester)?\s*', '', instructor_raw, flags=re.IGNORECASE).strip()
-    # Truncate at known "stop" keywords that signal the end of a subject row or start of metadata
-    instructor = re.split(r'\b(TOTAL|Adviser|Republic|University|College|Tamag|Ilocos|Bachelor|Major|Name|Home)\b', instructor, flags=re.IGNORECASE)[0].strip()
-    if instructor == "—": instructor = ""
+    # Pass 2 – split any long lines that contain multiple concatenated subjects
+    split_lines: List[str] = []
+    for line in merged:
+        split_lines.extend(_split_concatenated_subjects(line))
 
-    return {
-        'subject_code': subject_code,
-        'subject_name': subject_name or subject_code,
-        'units': units,
-        'midterm_grade': mid,
-        'final_grade': fin,
-        'semester': current_sem,
-        'year_level': current_year,
-        'school_year': '',
-        'instructor': instructor
-    }
+    # Pass 3 – re-apply sem merges on freshly split lines
+    final_lines = _apply_sem_merges(split_lines)
+
+    return '\n'.join(final_lines)
 
 
 def extract_student_info_from_appraisal(text: str) -> dict:
@@ -574,6 +745,12 @@ def extract_student_info_from_appraisal(text: str) -> dict:
         raw_name = addr_split[0].strip()
         if len(addr_split) > 1:
             raw_address = addr_split[1].strip()
+            # Strip any section-header noise that the PDF may append after the address
+            # e.g. "Rivadavia Narvacan Ilocos Sur First Year - First Semester Subject"
+            raw_address = re.split(
+                r'\s+(?:First|Second|Third|Fourth|Fifth|1st|2nd|3rd|4th|5th)\s+Year',
+                raw_address, flags=re.IGNORECASE
+            )[0].strip()
 
     # Home Address on its own line if not found above
     if not raw_address:
@@ -635,46 +812,44 @@ def extract_subject_rows_from_appraisal(text: str) -> List[dict]:
         r'College|Bachelor|Ladder|\d{4})',
         re.IGNORECASE,
     )
-    
-    # Subject code anchor to split chunks
-    code_start_pattern = re.compile(r'\b(?:[A-Za-z]{2,}(?:\s+[A-Za-z0-9]+)?\s+\d+|ETHICS|RIZAL|STS|OJT|PCOM|PATHFIT)\b', re.IGNORECASE)
 
     rows: List[dict] = []
-    current_sem = 1
-    current_year = 1
+    current_sem = 1  # Default
+    current_year = 1 # Default
     
-    # Partition lines into chunks by subject start or section header
-    chunks: List[List[str]] = []
-    current_chunk: List[str] = []
-    
-    for line in processed_lines:
-        sec_match = _SECTION_HEADER.search(line)
-        is_new_subj = code_start_pattern.search(line) and not _SKIP.search(line)
-        
-        if sec_match or is_new_subj:
-            if current_chunk:
-                chunks.append(current_chunk)
-            current_chunk = [line]
-        else:
-            current_chunk.append(line)
-    if current_chunk:
-        chunks.append(current_chunk)
+    for line in processed_lines.splitlines():
+        line = line.strip()
+        if not line: continue
 
-    # Process chunks
-    for chunk in chunks:
-        first_line = chunk[0]
-        sec_match = _SECTION_HEADER.search(first_line)
+        # Track Year and Semester from section headers
+        sec_match = _SECTION_HEADER.search(line)
         if sec_match:
-            current_year = _YEAR_ORDINAL.get(sec_match.group(1).lower(), 1)
+            year_word = sec_match.group(1).lower()
             sem_word = sec_match.group(2).lower()
+            current_year = _YEAR_ORDINAL.get(year_word, 1)
             current_sem = 1 if 'first' in sem_word or '1st' in sem_word else 2 if 'second' in sem_word or '2nd' in sem_word else 3
-            # If there's subject data in the same chunk as header, parse it too
-            if len(chunk) > 1 and code_start_pattern.search(" ".join(chunk[1:])):
-                data = _parse_appraisal_chunk(chunk[1:], current_year, current_sem)
-                if data: rows.append(data)
-        else:
-            data = _parse_appraisal_chunk(chunk, current_year, current_sem)
-            if data: rows.append(data)
+            continue
+
+        if _SKIP.match(line): continue
+
+        # Simple line-by-line regex match
+        m = _match_subject_line(line)
+        if m:
+            mid = parse_grade_token(m.group('mid'))
+            fin = parse_grade_token(m.group('fin'))
+            # Only include if there is at least one grade
+            if mid is not None or fin is not None:
+                rows.append({
+                    'subject_code': m.group('code').strip().upper(),
+                    'subject_name': m.group('title').strip(),
+                    'units': _normalize_units(m.group('units')),
+                    'midterm_grade': mid,
+                    'final_grade': fin,
+                    'semester': current_sem,
+                    'year_level': current_year,
+                    'school_year': '',
+                    'instructor': (m.group('instructor') or '').strip()
+                })
 
     return rows
 
@@ -1069,6 +1244,43 @@ def sync_deficiency_from_grade(db: Session, student_id: str, subject_id: int, se
             db.commit()
 
 
+def sync_enrollment_from_grade(db: Session, student_id: str, subject_id: int, semester: int, school_year: Optional[str], instructor: Optional[str], units: Optional[float] = None):
+    # Find if there is an existing enrollment
+    existing = db.query(Enrollment).filter(
+        Enrollment.student_id == student_id,
+        Enrollment.subject_id == subject_id,
+        Enrollment.semester == semester,
+        Enrollment.school_year == school_year
+    ).first()
+    
+    if units is None:
+        subject = db.query(Subject).filter(Subject.subject_id == subject_id).first()
+        units = float(subject.unit) if (subject and subject.unit is not None) else 3.0
+
+    if not existing:
+        new_enroll = Enrollment(
+            student_id=student_id,
+            subject_id=subject_id,
+            semester=semester,
+            school_year=school_year,
+            instructor=instructor,
+            units=units,
+            date_enrolled=date.today().isoformat()
+        )
+        db.add(new_enroll)
+        db.commit()
+    else:
+        updated = False
+        if instructor and existing.instructor != instructor:
+            existing.instructor = instructor
+            updated = True
+        if units is not None and existing.units != units:
+            existing.units = units
+            updated = True
+        if updated:
+            db.commit()
+
+
 def create_grade_record(db: Session, student_id: str, row: dict) -> Grade:
     subject = find_or_create_subject(
         db,
@@ -1093,6 +1305,8 @@ def create_grade_record(db: Session, student_id: str, row: dict) -> Grade:
         Grade.school_year == school_year,
     ).first()
 
+    units_val = float(row.get('units')) if row.get('units') is not None else None
+
     if existing:
         existing.midterm    = row.get('midterm_grade')
         existing.finals     = row.get('final_grade')
@@ -1102,6 +1316,7 @@ def create_grade_record(db: Session, student_id: str, row: dict) -> Grade:
         db.commit()
         db.refresh(existing)
         sync_deficiency_from_grade(db, student_id, subject.subject_id, semester, final_remark, school_year)
+        sync_enrollment_from_grade(db, student_id, subject.subject_id, semester, school_year, row.get('instructor'), units_val)
         return existing
 
     entry = Grade(
@@ -1119,6 +1334,7 @@ def create_grade_record(db: Session, student_id: str, row: dict) -> Grade:
     db.commit()
     db.refresh(entry)
     sync_deficiency_from_grade(db, student_id, subject.subject_id, semester, final_remark, school_year)
+    sync_enrollment_from_grade(db, student_id, subject.subject_id, semester, school_year, row.get('instructor'), units_val)
     return entry
 
 
@@ -1352,12 +1568,14 @@ def commit_appraisal(data: AppraisalCommitIn, db: Session = Depends(get_db)):
     if not s.get('first_name') or not s.get('last_name'): missing_fields.append("Student Name")
     if not s.get('course'): missing_fields.append("Course")
 
+    # Student ID is mandatory for appraisals — PDFs normally lack it so users must supply it.
+    # Without it the system would create a duplicate student with an auto-generated TMP-xxx ID.
+    raw_sid = (s.get('student_id') or '').strip()
+    if not raw_sid or raw_sid == '-':
+        missing_fields.append("Student ID")
+
     if not data.rows:
         missing_fields.append("Subject List (cannot be empty)")
-    else:
-        for i, row in enumerate(data.rows):
-            if not row.school_year or not str(row.school_year).strip():
-                missing_fields.append(f"Row {i+1} School Year")
 
     if missing_fields:
         raise HTTPException(

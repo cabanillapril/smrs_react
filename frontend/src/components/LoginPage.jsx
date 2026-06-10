@@ -16,6 +16,9 @@ export default function LoginPage({ onLogin }) {
       toast('Welcome back, ' + data.username + '!')
       onLogin()
     } catch (err) {
+      if (err.message.includes('Invalid')) {
+        alert('Login Failed: ' + err.message);
+      }
       toast(err.message, 'error')
     } finally {
       setLoading(false)

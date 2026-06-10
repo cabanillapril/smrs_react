@@ -8,7 +8,7 @@ from ..schemas.grade_schema import GradeUpdate, GradeOut
 from ..models.grade_model import Grade
 from ..models.subjects_model import Subject
 from ..models.students_model import Student
-from .import_routes import sync_deficiency_from_grade
+from .import_routes import sync_deficiency_from_grade, sync_enrollment_from_grade
 
 router = APIRouter()
 
@@ -69,6 +69,18 @@ def get_grades_by_student(student_id: str, db: Session = Depends(get_db)):
 
 @router.post("/", response_model=GradeOut, status_code=201)
 def create_grade(data: GradeIn, db: Session = Depends(get_db)):
+    # Verify student exists
+    student_obj = db.query(Student).filter(
+        (Student.student_id == data.student_id) | (Student.student_number == data.student_id)
+    ).first()
+    if not student_obj:
+        raise HTTPException(
+            status_code=404, 
+            detail=f"Student ID '{data.student_id}' does not exist in the database. Please register the student first."
+        )
+    # Use normalized student_id
+    data.student_id = student_obj.student_id
+
     code = data.subject_code.strip().upper()
 
     # Find or create subject
@@ -104,6 +116,7 @@ def create_grade(data: GradeIn, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(entry)
     sync_deficiency_from_grade(db, entry.student_id, entry.subject_id, entry.semester, entry.remarks, entry.school_year)
+    sync_enrollment_from_grade(db, entry.student_id, entry.subject_id, entry.semester, entry.school_year, entry.instructor, float(subject.unit) if subject.unit is not None else 3.0)
     return _enrich(entry, db)
 
 
@@ -139,6 +152,7 @@ def update_grade(grade_id: int, data: GradeUpdate, db: Session = Depends(get_db)
 
     grade = grade_repo.update(db, grade_id, data)
     sync_deficiency_from_grade(db, grade["student_id"], grade["subject_id"], grade["semester"], grade["remarks"], grade["school_year"])
+    sync_enrollment_from_grade(db, grade["student_id"], grade["subject_id"], grade["semester"], grade["school_year"], grade["instructor"], float(grade["unit"]) if grade.get("unit") is not None else 3.0)
     return grade
 
 
